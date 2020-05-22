@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package pb;
+
+// Sign verify part cert info
+message PartCert {
+    int64 replica_id = 1;
+    bytes signature = 2;
+}
+
+// QuorumCert is a data type that combines a collection of signatures from replicas.
+message QuorumCert {
+    // The hash of block data.
+    bytes block_hash = 1;
+    // the votes of the leader gathered from replicas for proposal.
+    map<int64, PartCert> signs = 2;
+}
+
+// The wrapper of block struct
+message Block {
+    // parent_hash is the parent hash of the block
+    bytes parent_hash = 1;
+    // Any data needed to exec, like: block, tx...
+    bytes cmds = 2;
+    // The miner's address of current block
+    string proposer = 3;
+    // The height of the blockchain
+    int64 height = 4;
+    // Timestamp of the block
+    int64 timestamp = 5;
+    // qc of cmd for parent block
+    QuorumCert justify = 6;
+    // qc of cmd for self
+    QuorumCert self_qc = 7;
+}
+
+// Types of communication messages between replicas
+message Message {
+    oneof type {
+        NewView new_view = 1;
+        Proposal proposal = 2;
+        Vote vote = 3;
+    };
+}
+
+// new view msg
+message NewView {
+    QuorumCert generic_qc = 1;
+}
+
+// broadcast proposal to other replicas
+message Proposal {
+    int64 proposer = 1;
+    Block block = 2;
+}
+
+// Vote messages
+message Vote {
+    // Voter replica id
+    int64 voter = 1;
+    // The hash of block being voted
+    bytes block_hash = 2;
+    // Proof of validity for the vote
+    PartCert cert = 3;
+}
+
+
+
