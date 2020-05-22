@@ -11,6 +11,7 @@ type proposeEvent struct {
 }
 
 func (p *proposeEvent) Execute(base *HotStuffBase) {
+	base.doBroadcastProposal(p.proposal)
 }
 
 type receiveProposalEvent struct {
@@ -26,7 +27,7 @@ type voteEvent struct {
 }
 
 func (v *voteEvent) Execute(base *HotStuffBase) {
-
+	base.doVote(v.vote)
 }
 
 type decideEvent struct {
@@ -34,7 +35,7 @@ type decideEvent struct {
 }
 
 func (d *decideEvent) Execute(base *HotStuffBase) {
-
+	base.doDecide(d.cmds)
 }
 
 type qcFinishEvent struct {
@@ -42,7 +43,11 @@ type qcFinishEvent struct {
 }
 
 func (q *qcFinishEvent) Execute(base *HotStuffBase) {
+	if int64(base.GetID()) != base.GetLeader(base.GetVoteHeight()+1) {
+		go base.NextSyncView(base.GetLeader(base.GetVoteHeight() + 1))
+	}
 
+	base.OnPropose(base.Beat())
 }
 
 type hqcUpdateEvent struct {
@@ -50,5 +55,5 @@ type hqcUpdateEvent struct {
 }
 
 func (h *hqcUpdateEvent) Execute(base *HotStuffBase) {
-
+	base.UpdateHighestQC(h.qc)
 }

@@ -31,7 +31,7 @@ type ReplicaConf struct {
 	Replicas   map[ReplicaID]*ReplicaInfo
 }
 
-// VerifyQuorumCert will verify a QuorumCert from public keys stored in ReplicaConfig
+// VerifyQuorumCert will verify a QuorumCert from public keys stored in ReplicaConf
 func (rc *ReplicaConf) VerifyQuorumCert(qc *pb.QuorumCert) bool {
 	if qc == nil || len(qc.Signs) < rc.QuorumSize {
 		return false
@@ -41,7 +41,7 @@ func (rc *ReplicaConf) VerifyQuorumCert(qc *pb.QuorumCert) bool {
 	for id, pc := range qc.Signs {
 		info, ok := rc.Replicas[ReplicaID(id)]
 		if !ok {
-			logger.Warn("got signature from replicas failed.", "replicaId", id)
+			logger.Warn("got replica info failed.", "replicaId", id)
 			continue
 		}
 		wg.Add(1)
@@ -56,6 +56,25 @@ func (rc *ReplicaConf) VerifyQuorumCert(qc *pb.QuorumCert) bool {
 	}
 	wg.Wait()
 	return numVerified >= uint64(rc.QuorumSize)
+}
+
+// VerifyVote will verify a vote from public keys stored in ReplicaConf
+func (rc *ReplicaConf) VerifyVote(vote *pb.Vote) bool {
+	if vote == nil || vote.Cert == nil {
+		return false
+	}
+	info, ok := rc.Replicas[ReplicaID(vote.Voter)]
+	if !ok {
+		logger.Warn("got replica info failed.", "replicaId", vote.Voter)
+		return false
+	}
+
+	if ok, err := info.Verifier.Verify(vote.Cert.Signature, vote.BlockHash); err != nil || !ok {
+		logger.Error("verify vote signature failed.", "replicaId", vote.Voter)
+		return false
+	}
+
+	return true
 }
 
 func GetBlockHash(block *pb.Block) []byte {

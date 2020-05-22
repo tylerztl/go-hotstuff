@@ -63,6 +63,3 @@ message Vote {
     // Proof of validity for the vote
     PartCert cert = 3;
 }
-
-
-

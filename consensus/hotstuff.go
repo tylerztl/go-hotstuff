@@ -92,7 +92,7 @@ func (hsc *HotStuffCore) OnPropose(parentHash, cmds []byte) error {
 		return errors.New("new block should be higher than vote height")
 	}
 	hsc.voteHeight = newBlock.Height
-	vote, err := hsc.doVote(hash, false)
+	vote, err := hsc.voteProposal(hash, false)
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (hsc *HotStuffCore) OnReceiveProposal(block *pb.Block) error {
 
 	hsc.notify(&receiveProposalEvent{&pb.Proposal{Proposer: int64(hsc.id), Block: block}})
 
-	if _, err := hsc.doVote(block.SelfQc.BlockHash, true); err != nil {
+	if _, err := hsc.voteProposal(block.SelfQc.BlockHash, true); err != nil {
 		return err
 	}
 
@@ -180,7 +180,7 @@ func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
 	return nil
 }
 
-func (hsc *HotStuffCore) doVote(hash []byte, deliver bool) (*pb.Vote, error) {
+func (hsc *HotStuffCore) voteProposal(hash []byte, deliver bool) (*pb.Vote, error) {
 	cert, err := hsc.createPartCert(hash)
 	if err != nil {
 		return nil, err
@@ -196,10 +196,6 @@ func (hsc *HotStuffCore) doVote(hash []byte, deliver bool) (*pb.Vote, error) {
 	}
 
 	return vote, nil
-}
-
-func (hsc *HotStuffCore) doDecide(block *pb.Block) {
-	hsc.notify(&decideEvent{block.Cmds})
 }
 
 func (hsc *HotStuffCore) update(block *pb.Block) error {
@@ -246,7 +242,9 @@ func (hsc *HotStuffCore) update(block *pb.Block) error {
 
 	for i, nblk := block0.Height-execHeight, block0; i > 0; i-- {
 		hsc.blockCache.Delete(hex.EncodeToString(GetBlockHash(nblk)))
-		hsc.doDecide(nblk)
+
+		hsc.notify(&decideEvent{nblk.Cmds})
+
 		if nblk, err = hsc.getBlockByHash(nblk.ParentHash); err != nil {
 			return err
 		}
