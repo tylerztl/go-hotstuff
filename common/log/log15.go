@@ -30,13 +30,17 @@ func New(ctx ...interface{}) Logger {
 	log.SetHandler(log15.SyncHandler(log15.MultiHandler(
 		log15.StreamHandler(os.Stderr, log15.LogfmtFormat()),
 		log15.LvlFilterHandler(log15.LvlError, log15.Must.FileHandler(
-			errorFile, log15.JsonFormat())))))
+			errorFile, log15.JsonFormat())),
+	)))
 
 	return log
 }
 
-func GetLogger() Logger {
-	return logger
+func GetLogger(ctx ...interface{}) Logger {
+	if len(ctx) == 0 {
+		return logger
+	}
+	return New(ctx...)
 }
 
 func GetCurrentPath() string {
