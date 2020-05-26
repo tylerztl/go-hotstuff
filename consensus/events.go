@@ -6,6 +6,10 @@ type EventNotifier interface {
 	Execute(base *HotStuffBase)
 }
 
+type MsgExecutor interface {
+	Execute(base *HotStuffBase)
+}
+
 type proposeEvent struct {
 	proposal *pb.Proposal
 }
@@ -56,4 +60,13 @@ type hqcUpdateEvent struct {
 
 func (h *hqcUpdateEvent) Execute(base *HotStuffBase) {
 	base.UpdateHighestQC(h.qc)
+}
+
+type msgEvent struct {
+	src ReplicaID
+	msg *pb.Message
+}
+
+func (m *msgEvent) Execute(base *HotStuffBase) {
+	base.receiveMsg(m.msg, m.src)
 }

@@ -23,7 +23,7 @@ message Block {
     // Any data needed to exec, like: block, tx...
     bytes cmds = 2;
     // The miner's address of current block
-    string proposer = 3;
+    int64 proposer = 3;
     // The height of the blockchain
     int64 height = 4;
     // Timestamp of the block

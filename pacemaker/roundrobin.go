@@ -15,7 +15,7 @@ func NewRoundRobinPM() *RoundRobinPM {
 }
 
 func (r *RoundRobinPM) Beat() (parentHash, cmds []byte) {
-
+	return
 }
 
 func (r *RoundRobinPM) NextSyncView(leader int64) {
@@ -31,5 +31,5 @@ func (r *RoundRobinPM) UpdateHighestQC(qc *pb.QuorumCert) {
 }
 
 func (r *RoundRobinPM) GetLeader(voteHeight int64) int64 {
-
+	return 0
 }

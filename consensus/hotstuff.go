@@ -36,8 +36,6 @@ type HotStuffCore struct {
 	// identity of the replica itself
 	id ReplicaID
 
-	address string
-
 	crypto.Signer
 
 	replicas *ReplicaConf
@@ -45,7 +43,7 @@ type HotStuffCore struct {
 	notifyChan chan EventNotifier
 }
 
-func NewHotStuffCore(id ReplicaID, address string, signer crypto.Signer, replicas *ReplicaConf) *HotStuffCore {
+func NewHotStuffCore(id ReplicaID, signer crypto.Signer, replicas *ReplicaConf) *HotStuffCore {
 	// TODO: node restart, sync block
 	genesis := &pb.Block{
 		Height: 0,
@@ -57,7 +55,6 @@ func NewHotStuffCore(id ReplicaID, address string, signer crypto.Signer, replica
 		mut:          &sync.Mutex{},
 		blockCache:   &sync.Map{},
 		id:           id,
-		address:      address,
 		Signer:       signer,
 		replicas:     replicas,
 		notifyChan:   make(chan EventNotifier, 10),
@@ -303,7 +300,7 @@ func (hsc *HotStuffCore) createLeaf(parentHash, cmds []byte, height int64) *pb.B
 	return &pb.Block{
 		ParentHash: parentHash,
 		Cmds:       cmds,
-		Proposer:   hsc.address,
+		Proposer:   int64(hsc.id),
 		Height:     height,
 		Timestamp:  time.Now().UnixNano(),
 		Justify:    hsc.genericQC,

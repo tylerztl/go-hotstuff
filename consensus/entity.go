@@ -11,7 +11,7 @@ import (
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
 
-var logger = log.GetLogger()
+var logger = log.GetLogger("module", "consensus")
 
 type ReplicaID int64
 
@@ -22,7 +22,6 @@ type Verifier interface {
 // ReplicaInfo holds information about a replica
 type ReplicaInfo struct {
 	ID       ReplicaID
-	Address  string
 	Verifier Verifier
 }
 

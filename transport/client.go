@@ -1,4 +1,4 @@
-package network
+package transport
 
 import (
 	"context"
@@ -16,7 +16,7 @@ var (
 	// Max send and receive bytes for grpc clients and servers
 	MaxRecvMsgSize           = 100 * 1024 * 1024 // 100 MiB
 	MaxSendMsgSize           = 100 * 1024 * 1024
-	DefaultConnectionTimeout = time.Second * 5
+	DefaultConnectionTimeout = time.Second * 3
 	ServerMinInterval        = time.Duration(1) * time.Minute
 )
 

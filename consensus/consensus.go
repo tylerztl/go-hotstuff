@@ -11,17 +11,26 @@ import (
 type HotStuffBase struct {
 	*HotStuffCore
 	pacemaker.PaceMaker
+	queue    chan MsgExecutor
 	execFunc func(cmds []byte)
+	nodes    *NodeManager
 }
 
-func NewHotStuffBase(id ReplicaID, address string, signer crypto.Signer, replicas *ReplicaConf) *HotStuffBase {
+func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer crypto.Signer, replicas *ReplicaConf) *HotStuffBase {
+	if len(nodes) == 0 {
+		logger.Error("not found hotstuff replica node info")
+		return nil
+	}
 	return &HotStuffBase{
-		HotStuffCore: NewHotStuffCore(id, address, signer, replicas),
+		HotStuffCore: NewHotStuffCore(id, signer, replicas),
 		PaceMaker:    pacemaker.NewRoundRobinPM(),
+		queue:        make(chan MsgExecutor),
+		execFunc:     func([]byte) {},
+		nodes:        NewNodeManager(id, nodes),
 	}
 }
 
-func (hsb *HotStuffBase) HandlePropose(proposal *pb.Proposal) {
+func (hsb *HotStuffBase) handlePropose(proposal *pb.Proposal) {
 	if proposal.Block == nil {
 		logger.Warn("handle propose with empty block", "proposer", proposal.Proposer)
 		return
@@ -33,7 +42,7 @@ func (hsb *HotStuffBase) HandlePropose(proposal *pb.Proposal) {
 	}
 }
 
-func (hsb *HotStuffBase) HandleVote(vote *pb.Vote) {
+func (hsb *HotStuffBase) handleVote(vote *pb.Vote) {
 	if ok := hsb.replicas.VerifyVote(vote); !ok {
 		return
 	}
@@ -41,6 +50,10 @@ func (hsb *HotStuffBase) HandleVote(vote *pb.Vote) {
 		logger.Warn("handle vote catch error", "error", err)
 		return
 	}
+}
+
+func (hsb *HotStuffBase) handleNewView(newView *pb.NewView) {
+
 }
 
 func (hsb *HotStuffBase) doBroadcastProposal(proposal *pb.Proposal) {
@@ -64,13 +77,30 @@ func (hsb *HotStuffBase) GetVoteHeight() int64 {
 }
 
 func (hsb *HotStuffBase) Start(ctx context.Context) {
-	notifier := hsb.GetNotifier()
+	go hsb.nodes.StartServer()
+	hsb.nodes.ConnectWorkers(hsb.queue)
+
 	for {
 		select {
-		case n := <-notifier:
+		case m := <-hsb.queue:
+			m.Execute(hsb)
+		case n := <-hsb.GetNotifier():
 			n.Execute(hsb)
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+func (hsb *HotStuffBase) receiveMsg(msg *pb.Message, src ReplicaID) {
+	logger.Debug("received message", "from", src, "to", hsb.id, "msgType", msg.Type)
+
+	switch msg.GetType().(type) {
+	case *pb.Message_Proposal:
+		hsb.handlePropose(msg.GetProposal())
+	case *pb.Message_NewView:
+		hsb.handleNewView(msg.GetNewView())
+	case *pb.Message_Vote:
+		hsb.handleVote(msg.GetVote())
 	}
 }
