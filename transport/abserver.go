@@ -2,11 +2,13 @@ package transport
 
 import (
 	"context"
+	"strconv"
 	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/pb"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 )
 
@@ -82,8 +84,12 @@ func (a *abServer) UnicastMsg(msg *pb.Message, dest int64) error {
 }
 
 func extractRemoteAddress(ctx context.Context) (remoteAddress string, replicaId int64) {
-	if value, ok := ctx.Value(nodeKey).(*NodeContext); ok {
-		replicaId = int64(value.replicaId)
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		// 注意key小写
+		if value, ok := md["replicaid"]; ok {
+			id, _ := strconv.Atoi(value[0])
+			replicaId = int64(id)
+		}
 	}
 
 	p, ok := peer.FromContext(ctx)

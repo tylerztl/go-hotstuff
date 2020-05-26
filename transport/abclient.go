@@ -2,26 +2,17 @@ package transport
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/pb"
+	"google.golang.org/grpc/metadata"
 )
 
 type BroadcastClient interface {
 	Send(msg *pb.Message) error
 	Recv() (*pb.Message, error)
 	Close() error
-}
-
-type NodeContext struct {
-	replicaId key
-}
-type key int64
-
-var nodeKey key
-
-func NewContext(ctx context.Context, n *NodeContext) context.Context {
-	return context.WithValue(ctx, nodeKey, n)
 }
 
 type abClient struct {
@@ -38,7 +29,10 @@ func NewBroadcastClient(address string, replicaId int64, opts *TLSOptions) (Broa
 	if err != nil {
 		return nil, errors.Errorf("grpc client failed to connect to %s, err: %v", address, err)
 	}
-	bc, err := pb.NewAtomicBroadcastClient(conn).Broadcast(NewContext(context.Background(), &NodeContext{key(replicaId)}))
+
+	// 在 grpc 中，client 与 server 之间通过 context 传递上下文数据的时候，不能使用 context.WithValue。
+	md := metadata.Pairs("replicaid", strconv.Itoa(int(replicaId)))
+	bc, err := pb.NewAtomicBroadcastClient(conn).Broadcast(metadata.NewOutgoingContext(context.Background(), md))
 	if err != nil {
 		return nil, err
 	}
