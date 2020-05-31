@@ -2,7 +2,6 @@ package pacemaker
 
 import (
 	"context"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/consensus"
@@ -25,6 +24,8 @@ func NewRoundRobinPM(hsb *consensus.HotStuffBase) *RoundRobinPM {
 
 func (r *RoundRobinPM) Run() {
 	r.Start(context.Background())
+
+	go r.OnBeat()
 
 	for {
 		select {
@@ -56,8 +57,6 @@ func (r *RoundRobinPM) Run() {
 			case *consensus.DecideEvent:
 				r.doDecide(n.(*consensus.DecideEvent).Cmds)
 			}
-		case <-time.After(time.Second * 3):
-			r.OnBeat()
 		}
 	}
 }
@@ -72,8 +71,6 @@ func (r *RoundRobinPM) OnBeat() {
 		if err := r.OnPropose(r.GetHighQC().BlockHash, s); err != nil {
 			logger.Error("propose catch error", "error", err)
 		}
-	case <-time.After(time.Second):
-		//r.OnNextSyncView(r.GetLeader())
 	}
 }
 
