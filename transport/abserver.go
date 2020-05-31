@@ -62,7 +62,7 @@ func (a *abServer) Broadcast(srv pb.AtomicBroadcast_BroadcastServer) error {
 
 func (a *abServer) BroadcastMsg(msg *pb.Message) error {
 	a.sendLock.RLock()
-	defer a.sendLock.Unlock()
+	defer a.sendLock.RUnlock()
 
 	for _, ch := range a.sendChan {
 		ch <- msg
@@ -72,7 +72,7 @@ func (a *abServer) BroadcastMsg(msg *pb.Message) error {
 
 func (a *abServer) UnicastMsg(msg *pb.Message, dest int64) error {
 	a.sendLock.RLock()
-	defer a.sendLock.Unlock()
+	defer a.sendLock.RUnlock()
 
 	ch, ok := a.sendChan[dest]
 	if !ok {

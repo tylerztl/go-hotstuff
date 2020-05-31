@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 
@@ -18,21 +19,19 @@ func main() {
 	flag.BoolVar(&tlsEnabled, "tls", false, "Use TLS when communicating with the hotstuff node endpoint")
 	flag.Parse()
 
-	client, err := transport.NewBroadcastClient(serverAddr, replicaId, nil)
+	client, err := transport.NewGrpcClient(nil)
 	if err != nil {
-		fmt.Println("Error connecting:", err)
-		return
+		panic(err)
 	}
-	defer func() {
-		_ = client.Close()
-	}()
+	conn, err := client.NewConnection(serverAddr)
+	if err != nil {
+		panic(err)
+	}
 
-	done := make(chan struct{})
-	go func(msg *pb.Message) {
-		if err = client.Send(msg); err != nil {
-			panic(err)
-		}
-	}(&pb.Message{Type: &pb.Message_Proposal{Proposal: &pb.Proposal{Proposer: 1}}})
-
-	<-done
+	hsc := pb.NewHotstuffClient(conn)
+	resp, err := hsc.Submit(context.Background(), &pb.SubmitRequest{Cmds: []byte("hello")})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("submit resp:", resp)
 }

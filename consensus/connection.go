@@ -15,15 +15,16 @@ type NodeInfo struct {
 }
 
 type NodeManager struct {
-	server *transport.GrpcServer
-	self   *NodeInfo
+	transport.BroadcastServer
+	*transport.GrpcServer
+	Self *NodeInfo
 	// all nodes info contains self
-	nodes map[ReplicaID]*NodeInfo
+	Nodes map[ReplicaID]*NodeInfo
 }
 
-func NewNodeManager(id ReplicaID, replicas []*NodeInfo) *NodeManager {
+func NewNodeManager(id ReplicaID, replicas []*NodeInfo, hsb *HotStuffBase) *NodeManager {
 	mgr := &NodeManager{
-		nodes: make(map[ReplicaID]*NodeInfo, len(replicas)),
+		Nodes: make(map[ReplicaID]*NodeInfo, len(replicas)),
 	}
 	for _, node := range replicas {
 		if node.Id == id {
@@ -35,26 +36,27 @@ func NewNodeManager(id ReplicaID, replicas []*NodeInfo) *NodeManager {
 
 			server := transport.NewABServer()
 			pb.RegisterAtomicBroadcastServer(grpcServer.Server(), server)
-			mgr.server = grpcServer
-			mgr.self = node
+			mgr.BroadcastServer = server
+			mgr.GrpcServer = grpcServer
+			mgr.Self = node
 		}
-		mgr.nodes[node.Id] = node
+		mgr.Nodes[node.Id] = node
 	}
 
 	return mgr
 }
 
 func (n *NodeManager) StartServer() {
-	if err := n.server.Start(); err != nil {
+	if err := n.Start(); err != nil {
 		logger.Error(" Hotstuff node server start failed", "error", err)
 		panic(err)
 	}
-	logger.Info("Hotstuff node started, beginning to serve requests", "replicaId", n.self.Id, "serverAddress", n.self.Addr)
+	logger.Info("Hotstuff node started, beginning to serve requests", "replicaId", n.Self.Id, "serverAddress", n.Self.Addr)
 }
 
 func (n *NodeManager) ConnectWorkers(queue chan<- MsgExecutor) {
-	for _, node := range n.nodes {
-		if node.Id == n.self.Id {
+	for _, node := range n.Nodes {
+		if node.Id == n.Self.Id {
 			continue
 		}
 		go func(node *NodeInfo) {

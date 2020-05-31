@@ -117,3 +117,24 @@ func toLowS(k *ecdsa.PublicKey, s *big.Int) (*big.Int, bool, error) {
 
 	return s, false, nil
 }
+
+// GeneratePrivateKey returns a new public/private key pair based on ECDSA.
+func GeneratePrivateKey() (pk *ecdsa.PrivateKey, err error) {
+	return ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+}
+
+type ECDSASigner struct {
+	Pri *ecdsa.PrivateKey
+}
+
+func (s *ECDSASigner) Sign(digest []byte) ([]byte, error) {
+	return Sign(s.Pri, digest)
+}
+
+type ECDSAVerifier struct {
+	Pub *ecdsa.PublicKey
+}
+
+func (v *ECDSAVerifier) Verify(signature, digest []byte) (bool, error) {
+	return Verify(v.Pub, signature, digest)
+}

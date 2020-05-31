@@ -63,3 +63,31 @@ message Vote {
     // Proof of validity for the vote
     PartCert cert = 3;
 }
+
+// These status codes are intended to resemble selected HTTP status codes
+enum Status {
+    UNKNOWN = 0;
+    SUCCESS = 200;
+    BAD_REQUEST = 400;
+    FORBIDDEN = 403;
+    NOT_FOUND = 404;
+    REQUEST_ENTITY_TOO_LARGE = 413;
+    INTERNAL_SERVER_ERROR = 500;
+    NOT_IMPLEMENTED = 501;
+    SERVICE_UNAVAILABLE = 503;
+}
+
+message SubmitRequest {
+    bytes cmds = 1;
+}
+
+message SubmitResponse {
+    // Status code, which may be used to programatically respond to success/failure
+    Status status = 1;
+    // Info string which may contain additional information about the status returned
+    string info = 2;
+}
+
+service Hotstuff {
+    rpc Submit (SubmitRequest) returns (SubmitResponse);
+}
