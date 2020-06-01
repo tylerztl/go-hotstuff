@@ -11,7 +11,23 @@ import (
 	"github.com/zhigui-projects/go-hotstuff/pacemaker"
 )
 
-var pk ecdsa.PrivateKey // must not be a pointer
+const (
+	node0 = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgPEKtXy8Y2EibCmkU
+vxtjkwLfMbLDW8AMyoAMuqo19LmhRANCAAQcnT3TXcSLBeAjmCiqsdxgLks4DL4X
+JuWHVgwpSt29P576HvmISXR2Yt6ANzS31wEN6eZZjEd47e6s1fqZW4mI
+-----END PRIVATE KEY-----
+`
+	node1 = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgPpKflh9pkNFSsY8c
+97MUPKl6HFLboKNjGI/AKtJ9RWOhRANCAATB9/poI01ioHqV3i51QI3gOC5sQjhU
+9dEr8nLs5RzCboPCmniL/b4QCAPvpFBMLQtcxm/P/FNJYyibPk50BonF
+-----END PRIVATE KEY-----
+`
+)
+
+var replica0PK ecdsa.PrivateKey
+var replica1PK ecdsa.PrivateKey
 
 // The main command describes the service and
 // defaults to printing the help message.
@@ -38,11 +54,18 @@ var nodeStartCmd = &cobra.Command{
 }
 
 func initCmd(cmd *cobra.Command, args []string) {
-	k, err := crypto.GeneratePrivateKey()
+	pk0, err := crypto.ParsePrivateKey([]byte(node0))
 	if err != nil {
 		panic(err)
 	}
-	pk = *k
+
+	replica0PK = *pk0.(*ecdsa.PrivateKey)
+
+	pk1, err := crypto.ParsePrivateKey([]byte(node0))
+	if err != nil {
+		panic(err)
+	}
+	replica1PK = *pk1.(*ecdsa.PrivateKey)
 }
 
 func startCmd() *cobra.Command {
@@ -70,17 +93,29 @@ var nodes = []*consensus.NodeInfo{
 		Addr:    "127.0.0.1:8000",
 		TlsOpts: nil,
 	},
+	{
+		Id:      1,
+		Addr:    "127.0.0.1:8001",
+		TlsOpts: nil,
+	},
 }
 
 var replicas = &consensus.ReplicaConf{
-	QuorumSize: 1,
+	QuorumSize: 2,
 	Replicas: map[consensus.ReplicaID]*consensus.ReplicaInfo{
-		0: {ID: 0, Verifier: &crypto.ECDSAVerifier{Pub: &pk.PublicKey}},
+		0: {ID: 0, Verifier: &crypto.ECDSAVerifier{Pub: &replica0PK.PublicKey}},
+		1: {ID: 1, Verifier: &crypto.ECDSAVerifier{Pub: &replica1PK.PublicKey}},
 	},
 }
 
 func serve(args []string) error {
-	hsb := consensus.NewHotStuffBase(consensus.ReplicaID(replicaId), nodes, &crypto.ECDSASigner{Pri: &pk}, replicas)
+	var signer *ecdsa.PrivateKey
+	if replicaId == 0 {
+		signer = &replica0PK
+	} else if replicaId == 1 {
+		signer = &replica1PK
+	}
+	hsb := consensus.NewHotStuffBase(consensus.ReplicaID(replicaId), nodes, &crypto.ECDSASigner{Pri: signer}, replicas)
 	rr := pacemaker.NewRoundRobinPM(hsb)
 	rr.Run()
 	return nil

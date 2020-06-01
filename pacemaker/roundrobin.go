@@ -2,6 +2,7 @@ package pacemaker
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/consensus"
@@ -10,7 +11,9 @@ import (
 
 type RoundRobinPM struct {
 	*consensus.HotStuffBase
+	curView int64
 	submitC chan []byte
+	waitMsg chan struct{}
 }
 
 func NewRoundRobinPM(hsb *consensus.HotStuffBase) *RoundRobinPM {
@@ -26,6 +29,7 @@ func (r *RoundRobinPM) Run() {
 	r.Start(context.Background())
 
 	go r.OnBeat()
+	go r.newViewTimeout()
 
 	for {
 		select {
@@ -33,26 +37,22 @@ func (r *RoundRobinPM) Run() {
 			switch n.(type) {
 			case *consensus.ProposeEvent:
 				r.DoBroadcastProposal(n.(*consensus.ProposeEvent).Proposal)
-				if r.GetID() == r.GetLeader() {
-
-				}
 			case *consensus.ReceiveProposalEvent:
-				// TODO
+				r.waitMsg <- struct{}{}
 			case *consensus.VoteEvent:
 				r.DoVote(n.(*consensus.VoteEvent).Vote, r.GetLeader())
 			case *consensus.HqcUpdateEvent:
-				// TODO
+				r.curView = n.(*consensus.HqcUpdateEvent).Qc.ViewNumber
 			case *consensus.ReceiveNewView:
-				r.OnBeat()
+				view := n.(*consensus.ReceiveNewView)
+				if view.ViewNumber > r.curView {
+					r.curView = view.ViewNumber
+					r.OnBeat()
+				}
 			case *consensus.QcFinishEvent:
-				qc := n.(*consensus.QcFinishEvent)
-				// was leader for previous view, but not the leader for next view do view change
-				if r.GetID() == qc.Proposer {
-					if r.GetID() != r.GetLeader() {
-						go r.OnNextSyncView(r.GetLeader())
-					} else {
-						r.OnBeat()
-					}
+				r.waitMsg <- struct{}{}
+				if r.GetID() == r.GetLeader() {
+					r.OnBeat()
 				}
 			case *consensus.DecideEvent:
 				r.doDecide(n.(*consensus.DecideEvent).Cmds)
@@ -65,28 +65,21 @@ func (r *RoundRobinPM) doDecide(cmds []byte) {
 	logger.Info("consensus complete", "cmds", cmds)
 }
 
-func (r *RoundRobinPM) OnBeat() {
-	select {
-	case s := <-r.submitC:
-		if err := r.OnPropose(r.GetHighQC().BlockHash, s); err != nil {
-			logger.Error("propose catch error", "error", err)
-		}
-	}
-}
-
-func (r *RoundRobinPM) OnNextSyncView(leader int64) {
-	logger.Debug("enter next view", "leader", leader)
+func (r *RoundRobinPM) OnNextSyncView() {
+	leader := r.GetLeader()
+	logger.Debug("enter next view", "curView", r.curView, "nextLeader", leader)
+	r.curView++
 	if leader == r.GetID() {
 		r.OnBeat()
 		return
 	}
 	viewMsg := &pb.Message{Type: &pb.Message_NewView{
-		NewView: &pb.NewView{GenericQc: r.GetHighQC()}}}
+		NewView: &pb.NewView{ViewNumber: r.curView, GenericQc: r.GetHighQC()}}}
 	_ = r.UnicastMsg(viewMsg, leader)
 }
 
 func (r *RoundRobinPM) GetLeader() int64 {
-	return (r.GetID() + 1) % int64(len(r.Nodes))
+	return (r.curView + 1) % int64(len(r.Nodes))
 }
 
 func (r *RoundRobinPM) Submit(ctx context.Context, req *pb.SubmitRequest) (*pb.SubmitResponse, error) {
@@ -98,4 +91,25 @@ func (r *RoundRobinPM) Submit(ctx context.Context, req *pb.SubmitRequest) (*pb.S
 	r.submitC <- req.Cmds
 
 	return &pb.SubmitResponse{Status: pb.Status_SUCCESS}, nil
+}
+
+func (r *RoundRobinPM) OnBeat() {
+	select {
+	case s := <-r.submitC:
+		if err := r.OnPropose(r.curView, r.GetHighQC().BlockHash, s); err != nil {
+			logger.Error("propose catch error", "error", err)
+		}
+	case <-time.After(time.Second):
+	}
+}
+
+func (r *RoundRobinPM) newViewTimeout() {
+	for {
+		select {
+		case <-r.waitMsg:
+		case <-time.After(time.Second * 3):
+			logger.Warn("NewViewTimeout triggered")
+			r.OnNextSyncView()
+		}
+	}
 }

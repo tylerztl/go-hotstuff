@@ -31,7 +31,12 @@ type HqcUpdateEvent struct {
 	Qc *pb.QuorumCert
 }
 
+type NewViewEvent struct {
+}
+
 type ReceiveNewView struct {
+	ViewNumber int64
+	GenericQC  *pb.QuorumCert
 }
 
 //func (p *proposeEvent) Execute(base *HotStuffBase) {

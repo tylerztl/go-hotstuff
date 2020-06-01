@@ -57,7 +57,7 @@ func NewHotStuffCore(id ReplicaID, signer Signer, replicas *ReplicaConf) *HotStu
 		replicas:     replicas,
 		notifyChan:   make(chan interface{}, 10),
 	}
-	genesis.SelfQc = &pb.QuorumCert{BlockHash: hash, Signs: make(map[int64]*pb.PartCert)}
+	genesis.SelfQc = &pb.QuorumCert{ViewNumber: 0, BlockHash: hash, Signs: make(map[int64]*pb.PartCert)}
 	hsc.genericQC = genesis.SelfQc
 	hsc.lockedQC = genesis.SelfQc
 	hsc.execQC = genesis.SelfQc
@@ -65,7 +65,7 @@ func NewHotStuffCore(id ReplicaID, signer Signer, replicas *ReplicaConf) *HotStu
 	return hsc
 }
 
-func (hsc *HotStuffCore) OnPropose(parentHash, cmds []byte) error {
+func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error {
 	v, ok := hsc.blockCache.Load(hex.EncodeToString(parentHash))
 	if !ok {
 		return errors.Errorf("parent block [%s] not found", hex.EncodeToString(parentHash))
@@ -77,14 +77,14 @@ func (hsc *HotStuffCore) OnPropose(parentHash, cmds []byte) error {
 	hash := GetBlockHash(newBlock)
 	hsc.blockCache.Store(hex.EncodeToString(hash), newBlock)
 	// create quorum cert
-	newBlock.SelfQc = &pb.QuorumCert{BlockHash: hash, Signs: make(map[int64]*pb.PartCert)}
+	newBlock.SelfQc = &pb.QuorumCert{ViewNumber: curView, BlockHash: hash, Signs: make(map[int64]*pb.PartCert)}
 	err := hsc.update(newBlock)
 	if err != nil {
 		return err
 	}
 	// self vote
 	if newBlock.Height <= hsc.voteHeight {
-		return errors.New("new block should be higher than vote height")
+		return errors.Errorf("new block should be higher than vote height, newHeight:%d, voteHeight:%d", newBlock.Height, hsc.voteHeight)
 	}
 	hsc.voteHeight = newBlock.Height
 	vote, err := hsc.voteProposal(hash, false)
@@ -97,11 +97,13 @@ func (hsc *HotStuffCore) OnPropose(parentHash, cmds []byte) error {
 
 	logger.Debug("Proposed new proposal", "height", newBlock.Height, "parentHash", hex.EncodeToString(parentHash))
 	// broadcast proposal to other replicas
-	hsc.notify(&ProposeEvent{&pb.Proposal{Proposer: int64(hsc.id), Block: block}})
+	hsc.notify(&ProposeEvent{&pb.Proposal{Proposer: int64(hsc.id), Block: newBlock}})
 	return nil
 }
 
 func (hsc *HotStuffCore) OnReceiveProposal(block *pb.Block) error {
+	hsc.blockCache.Store(hex.EncodeToString(block.SelfQc.BlockHash), block)
+
 	if err := hsc.update(block); err != nil {
 		return err
 	}

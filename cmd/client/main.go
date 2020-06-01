@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"sync"
 
 	"github.com/zhigui-projects/go-hotstuff/pb"
 	"github.com/zhigui-projects/go-hotstuff/transport"
@@ -29,9 +30,17 @@ func main() {
 	}
 
 	hsc := pb.NewHotstuffClient(conn)
-	resp, err := hsc.Submit(context.Background(), &pb.SubmitRequest{Cmds: []byte("hello")})
-	if err != nil {
-		panic(err)
+	var wg sync.WaitGroup
+	for i := 0; i < 1; i++ {
+		wg.Add(1)
+		go func() {
+			resp, err := hsc.Submit(context.Background(), &pb.SubmitRequest{Cmds: []byte("hello")})
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("submit resp:", resp)
+			wg.Done()
+		}()
 	}
-	fmt.Println("submit resp:", resp)
+	wg.Wait()
 }

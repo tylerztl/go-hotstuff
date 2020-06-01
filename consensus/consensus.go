@@ -25,7 +25,7 @@ func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer Signer, replicas *R
 	return hsb
 }
 
-func (hsb *HotStuffBase) handlePropose(proposal *pb.Proposal) {
+func (hsb *HotStuffBase) handleProposal(proposal *pb.Proposal) {
 	logger.Debug("handle proposal msg", "proposer", proposal.Proposer, "blockHeight", proposal.Block.Height)
 	if proposal.Block == nil {
 		logger.Warn("handle propose with empty block", "proposer", proposal.Proposer)
@@ -55,8 +55,7 @@ func (hsb *HotStuffBase) handleNewView(newView *pb.NewView) {
 		return
 	}
 	hsb.updateHighestQC(block, newView.GenericQc)
-	hsb.notify(&ReceiveNewView{})
-
+	hsb.notify(&ReceiveNewView{ViewNumber: newView.ViewNumber, GenericQC: newView.GenericQc})
 }
 
 func (hsb *HotStuffBase) DoBroadcastProposal(proposal *pb.Proposal) {
@@ -64,7 +63,11 @@ func (hsb *HotStuffBase) DoBroadcastProposal(proposal *pb.Proposal) {
 }
 
 func (hsb *HotStuffBase) DoVote(vote *pb.Vote, leader int64) {
-	_ = hsb.UnicastMsg(&pb.Message{Type: &pb.Message_Vote{Vote: vote}}, leader)
+	if leader != hsb.GetID() {
+		_ = hsb.UnicastMsg(&pb.Message{Type: &pb.Message_Vote{Vote: vote}}, leader)
+	} else {
+		_ = hsb.OnReceiveVote(vote)
+	}
 }
 
 func (hsb *HotStuffBase) GetID() int64 {
@@ -92,7 +95,7 @@ func (hsb *HotStuffBase) receiveMsg(msg *pb.Message, src ReplicaID) {
 
 	switch msg.GetType().(type) {
 	case *pb.Message_Proposal:
-		hsb.handlePropose(msg.GetProposal())
+		hsb.handleProposal(msg.GetProposal())
 	case *pb.Message_NewView:
 		hsb.handleNewView(msg.GetNewView())
 	case *pb.Message_Vote:

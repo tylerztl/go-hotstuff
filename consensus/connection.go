@@ -68,7 +68,7 @@ func (n *NodeManager) ConnectWorkers(queue chan<- MsgExecutor) {
 
 				logger.Info("connecting to replica node", "id", node.Id, "address", node.Addr)
 
-				bc, err := transport.NewBroadcastClient(node.Addr, int64(node.Id), node.TlsOpts)
+				bc, err := transport.NewBroadcastClient(node.Addr, int64(n.Self.Id), node.TlsOpts)
 				if err != nil {
 					logger.Warn("could not connect to replica node", "id", node.Id, "address", node.Addr, "error", err)
 					continue

@@ -4,7 +4,9 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/asn1"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"math/big"
@@ -137,4 +139,30 @@ type ECDSAVerifier struct {
 
 func (v *ECDSAVerifier) Verify(signature, digest []byte) (bool, error) {
 	return Verify(v.Pub, signature, digest)
+}
+
+func ParsePrivateKey(pemBytes []byte) (key interface{}, err error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, errors.New("failed to decode ECDSA private key")
+	}
+	der := block.Bytes
+	if key, err = x509.ParsePKCS1PrivateKey(der); err == nil {
+		return key, nil
+	}
+
+	if key, err = x509.ParsePKCS8PrivateKey(der); err == nil {
+		switch key.(type) {
+		case *ecdsa.PrivateKey:
+			return
+		default:
+			return nil, errors.New("found unknown private key type in PKCS#8 wrapping")
+		}
+	}
+
+	if key, err = x509.ParseECPrivateKey(der); err == nil {
+		return
+	}
+
+	return nil, errors.New("invalid key type. The DER must contain an ecdsa.PrivateKey")
 }

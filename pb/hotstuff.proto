@@ -10,10 +10,12 @@ message PartCert {
 
 // QuorumCert is a data type that combines a collection of signatures from replicas.
 message QuorumCert {
+    // view number
+    int64 view_number = 1;
     // The hash of block data.
-    bytes block_hash = 1;
+    bytes block_hash = 2;
     // the votes of the leader gathered from replicas for proposal.
-    map<int64, PartCert> signs = 2;
+    map<int64, PartCert> signs = 3;
 }
 
 // The wrapper of block struct
@@ -45,7 +47,8 @@ message Message {
 
 // new view msg
 message NewView {
-    QuorumCert generic_qc = 1;
+    int64 view_number = 1;
+    QuorumCert generic_qc = 2;
 }
 
 // broadcast proposal to other replicas
