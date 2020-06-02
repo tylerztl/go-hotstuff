@@ -141,8 +141,6 @@ func (hsc *HotStuffCore) OnReceiveProposal(block *pb.Block) error {
 
 	// TODO: qc finish ?
 
-	hsc.notify(&ReceiveProposalEvent{&pb.Proposal{Proposer: int64(hsc.id), Block: block}})
-
 	if _, err := hsc.voteProposal(block.SelfQc.BlockHash, true); err != nil {
 		return err
 	}

@@ -4,6 +4,8 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/zhigui-projects/go-hotstuff/common/crypto"
@@ -109,6 +111,9 @@ var replicas = &consensus.ReplicaConf{
 }
 
 func serve(args []string) error {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+
 	var signer *ecdsa.PrivateKey
 	if replicaId == 0 {
 		signer = &replica0PK
@@ -118,5 +123,7 @@ func serve(args []string) error {
 	hsb := consensus.NewHotStuffBase(consensus.ReplicaID(replicaId), nodes, &crypto.ECDSASigner{Pri: signer}, replicas)
 	rr := pacemaker.NewRoundRobinPM(hsb)
 	rr.Run()
+
+	<-signals
 	return nil
 }

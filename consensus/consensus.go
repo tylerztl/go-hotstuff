@@ -2,13 +2,16 @@ package consensus
 
 import (
 	"context"
+	"time"
+
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
 
 type HotStuffBase struct {
 	*HotStuffCore
 	*NodeManager
-	queue chan MsgExecutor
+	queue   chan MsgExecutor
+	waitMsg chan struct{}
 }
 
 func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer Signer, replicas *ReplicaConf) *HotStuffBase {
@@ -19,6 +22,7 @@ func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer Signer, replicas *R
 	hsb := &HotStuffBase{
 		HotStuffCore: NewHotStuffCore(id, signer, replicas),
 		queue:        make(chan MsgExecutor),
+		waitMsg:      make(chan struct{}),
 	}
 	nodeMgr := NewNodeManager(id, nodes, hsb)
 	hsb.NodeManager = nodeMgr
@@ -31,6 +35,7 @@ func (hsb *HotStuffBase) handleProposal(proposal *pb.Proposal) {
 		logger.Warn("handle propose with empty block", "proposer", proposal.Proposer)
 		return
 	}
+	hsb.waitMsg <- struct{}{}
 
 	if err := hsb.OnReceiveProposal(proposal.Block); err != nil {
 		logger.Warn("handle propose catch error", "error", err)
@@ -77,6 +82,7 @@ func (hsb *HotStuffBase) GetID() int64 {
 func (hsb *HotStuffBase) Start(ctx context.Context) {
 	go hsb.StartServer()
 	hsb.ConnectWorkers(hsb.queue)
+	go hsb.newViewTimeout()
 
 	go func() {
 		for {
@@ -88,6 +94,16 @@ func (hsb *HotStuffBase) Start(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func (hsb *HotStuffBase) newViewTimeout() {
+	for {
+		select {
+		case <-hsb.waitMsg:
+		case <-time.After(time.Second * 3):
+			hsb.notify(&NewViewEvent{})
+		}
+	}
 }
 
 func (hsb *HotStuffBase) receiveMsg(msg *pb.Message, src ReplicaID) {

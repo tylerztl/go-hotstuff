@@ -13,7 +13,6 @@ type RoundRobinPM struct {
 	*consensus.HotStuffBase
 	curView int64
 	submitC chan []byte
-	waitMsg chan struct{}
 }
 
 func NewRoundRobinPM(hsb *consensus.HotStuffBase) *RoundRobinPM {
@@ -29,33 +28,36 @@ func (r *RoundRobinPM) Run() {
 	r.Start(context.Background())
 
 	go r.OnBeat()
-	go r.newViewTimeout()
 
+	go r.handleEvent()
+}
+
+func (r *RoundRobinPM) handleEvent() {
+	notifier := r.GetNotifier()
 	for {
 		select {
-		case n := <-r.GetNotifier():
+		case n := <-notifier:
 			switch n.(type) {
 			case *consensus.ProposeEvent:
-				r.DoBroadcastProposal(n.(*consensus.ProposeEvent).Proposal)
-			case *consensus.ReceiveProposalEvent:
-				r.waitMsg <- struct{}{}
+				go r.DoBroadcastProposal(n.(*consensus.ProposeEvent).Proposal)
 			case *consensus.VoteEvent:
-				r.DoVote(n.(*consensus.VoteEvent).Vote, r.GetLeader())
+				go r.DoVote(n.(*consensus.VoteEvent).Vote, r.GetLeader())
 			case *consensus.HqcUpdateEvent:
 				r.curView = n.(*consensus.HqcUpdateEvent).Qc.ViewNumber
+			case *consensus.NewViewEvent:
+				r.OnNextSyncView()
 			case *consensus.ReceiveNewView:
 				view := n.(*consensus.ReceiveNewView)
 				if view.ViewNumber > r.curView {
 					r.curView = view.ViewNumber
-					r.OnBeat()
+					go r.OnBeat()
 				}
 			case *consensus.QcFinishEvent:
-				r.waitMsg <- struct{}{}
 				if r.GetID() == r.GetLeader() {
-					r.OnBeat()
+					go r.OnBeat()
 				}
 			case *consensus.DecideEvent:
-				r.doDecide(n.(*consensus.DecideEvent).Cmds)
+				go r.doDecide(n.(*consensus.DecideEvent).Cmds)
 			}
 		}
 	}
@@ -70,7 +72,7 @@ func (r *RoundRobinPM) OnNextSyncView() {
 	logger.Debug("enter next view", "curView", r.curView, "nextLeader", leader)
 	r.curView++
 	if leader == r.GetID() {
-		r.OnBeat()
+		go r.OnBeat()
 		return
 	}
 	viewMsg := &pb.Message{Type: &pb.Message_NewView{
@@ -100,16 +102,5 @@ func (r *RoundRobinPM) OnBeat() {
 			logger.Error("propose catch error", "error", err)
 		}
 	case <-time.After(time.Second):
-	}
-}
-
-func (r *RoundRobinPM) newViewTimeout() {
-	for {
-		select {
-		case <-r.waitMsg:
-		case <-time.After(time.Second * 3):
-			logger.Warn("NewViewTimeout triggered")
-			r.OnNextSyncView()
-		}
 	}
 }
