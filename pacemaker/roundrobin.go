@@ -2,7 +2,7 @@ package pacemaker
 
 import (
 	"context"
-	"time"
+	"strconv"
 
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/consensus"
@@ -18,25 +18,21 @@ type RoundRobinPM struct {
 func NewRoundRobinPM(hsb *consensus.HotStuffBase) *RoundRobinPM {
 	rr := &RoundRobinPM{
 		HotStuffBase: hsb,
-		submitC:      make(chan []byte),
+		submitC:      make(chan []byte, 10),
 	}
 	pb.RegisterHotstuffServer(rr.Server(), rr)
 	return rr
 }
 
 func (r *RoundRobinPM) Run() {
-	r.Start(context.Background())
-
-	go r.OnBeat()
-
+	go r.Start(context.Background())
 	go r.handleEvent()
 }
 
 func (r *RoundRobinPM) handleEvent() {
-	notifier := r.GetNotifier()
 	for {
 		select {
-		case n := <-notifier:
+		case n := <-r.GetNotifier():
 			switch n.(type) {
 			case *consensus.ProposeEvent:
 				go r.DoBroadcastProposal(n.(*consensus.ProposeEvent).Proposal)
@@ -45,39 +41,40 @@ func (r *RoundRobinPM) handleEvent() {
 			case *consensus.HqcUpdateEvent:
 				r.curView = n.(*consensus.HqcUpdateEvent).Qc.ViewNumber
 			case *consensus.NewViewEvent:
-				r.OnNextSyncView()
+				go r.OnNextSyncView()
 			case *consensus.ReceiveNewView:
-				view := n.(*consensus.ReceiveNewView)
-				if view.ViewNumber > r.curView {
-					r.curView = view.ViewNumber
-					go r.OnBeat()
-				}
+				//view := n.(*consensus.ReceiveNewView)
+				//if view.ViewNumber > r.curView {
+				//	r.curView = view.ViewNumber
+				go r.OnBeat()
+				//}
 			case *consensus.QcFinishEvent:
 				if r.GetID() == r.GetLeader() {
 					go r.OnBeat()
 				}
 			case *consensus.DecideEvent:
-				go r.doDecide(n.(*consensus.DecideEvent).Cmds)
+				go r.doDecide(n.(*consensus.DecideEvent).Block)
 			}
 		}
 	}
 }
 
-func (r *RoundRobinPM) doDecide(cmds []byte) {
-	logger.Info("consensus complete", "cmds", cmds)
+func (r *RoundRobinPM) doDecide(block *pb.Block) {
+	cmds, _ := strconv.Atoi(string(block.Cmds))
+	logger.Info("consensus complete", "blockHeight", block.Height, "cmds", cmds)
 }
 
 func (r *RoundRobinPM) OnNextSyncView() {
 	leader := r.GetLeader()
-	logger.Debug("enter next view", "curView", r.curView, "nextLeader", leader)
 	r.curView++
+	logger.Debug("enter next view", "view", r.curView, "nextLeader", leader)
 	if leader == r.GetID() {
-		go r.OnBeat()
-		return
+		//r.OnBeat()
+	} else {
+		viewMsg := &pb.Message{Type: &pb.Message_NewView{
+			NewView: &pb.NewView{ViewNumber: r.curView, GenericQc: r.GetHighQC()}}}
+		_ = r.UnicastMsg(viewMsg, leader)
 	}
-	viewMsg := &pb.Message{Type: &pb.Message_NewView{
-		NewView: &pb.NewView{ViewNumber: r.curView, GenericQc: r.GetHighQC()}}}
-	_ = r.UnicastMsg(viewMsg, leader)
 }
 
 func (r *RoundRobinPM) GetLeader() int64 {
@@ -101,6 +98,7 @@ func (r *RoundRobinPM) OnBeat() {
 		if err := r.OnPropose(r.curView, r.GetHighQC().BlockHash, s); err != nil {
 			logger.Error("propose catch error", "error", err)
 		}
-	case <-time.After(time.Second):
+	default:
+		logger.Debug("no unprocessed submit request")
 	}
 }

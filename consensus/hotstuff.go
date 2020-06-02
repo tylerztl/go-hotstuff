@@ -3,6 +3,7 @@ package consensus
 import (
 	"bytes"
 	"encoding/hex"
+	"strconv"
 	"sync"
 	"time"
 
@@ -76,6 +77,7 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 	// add new block to storage
 	hash := GetBlockHash(newBlock)
 	hsc.blockCache.Store(hex.EncodeToString(hash), newBlock)
+	logger.Debug("create leaf node", "height", newBlock.Height, "hash", hex.EncodeToString(hash))
 	// create quorum cert
 	newBlock.SelfQc = &pb.QuorumCert{ViewNumber: curView, BlockHash: hash, Signs: make(map[int64]*pb.PartCert)}
 	err := hsc.update(newBlock)
@@ -95,7 +97,8 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 		return err
 	}
 
-	logger.Debug("Proposed new proposal", "height", newBlock.Height, "parentHash", hex.EncodeToString(parentHash))
+	req, _ := strconv.Atoi(string(cmds))
+	logger.Debug("Proposed new proposal", "cmds", req, "height", newBlock.Height, "parentHash", hex.EncodeToString(parentHash))
 	// broadcast proposal to other replicas
 	hsc.notify(&ProposeEvent{&pb.Proposal{Proposer: int64(hsc.id), Block: newBlock}})
 	return nil
@@ -251,7 +254,7 @@ func (hsc *HotStuffCore) update(block *pb.Block) error {
 			return err
 		}
 		logger.Debug("DECIDE phase, do consensus", "blockHeight", nblk.Height)
-		hsc.notify(&DecideEvent{nblk.Cmds})
+		hsc.notify(&DecideEvent{nblk})
 		//hsc.blockCache.Delete(hex.EncodeToString(blockHash))
 		blockHash = nblk.ParentHash
 	}
@@ -273,7 +276,6 @@ func (hsc *HotStuffCore) updateHighestQC(block *pb.Block, qc *pb.QuorumCert) {
 	defer hsc.mut.Unlock()
 
 	if hsc.genericQC == nil {
-		logger.Debug("update highest QC", "blockHeight", block.Height, "qc", qc)
 		hsc.genericQC = qc
 		return
 	}
@@ -282,9 +284,8 @@ func (hsc *HotStuffCore) updateHighestQC(block *pb.Block, qc *pb.QuorumCert) {
 		logger.Error("updateHighestQC call getBlockByHash failed", "error", err)
 		return
 	}
-
+	logger.Debug("update highest QC", "newHeight", block.Height, "oldHeight", highBlock.Height)
 	if block.Height > highBlock.Height {
-		logger.Debug("update highest QC", "blockHeight", block.Height, "qc", qc)
 		hsc.genericQC = qc
 		hsc.notify(&HqcUpdateEvent{qc})
 	}

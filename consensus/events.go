@@ -7,7 +7,7 @@ type ProposeEvent struct {
 }
 
 type DecideEvent struct {
-	Cmds []byte
+	Block *pb.Block
 }
 
 type VoteEvent struct {

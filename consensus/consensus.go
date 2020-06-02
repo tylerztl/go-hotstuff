@@ -59,6 +59,7 @@ func (hsb *HotStuffBase) handleNewView(newView *pb.NewView) {
 		logger.Error("Could not find block of new QC", "error", err)
 		return
 	}
+	hsb.waitMsg <- struct{}{}
 	hsb.updateHighestQC(block, newView.GenericQc)
 	hsb.notify(&ReceiveNewView{ViewNumber: newView.ViewNumber, GenericQC: newView.GenericQc})
 }
@@ -84,16 +85,14 @@ func (hsb *HotStuffBase) Start(ctx context.Context) {
 	hsb.ConnectWorkers(hsb.queue)
 	go hsb.newViewTimeout()
 
-	go func() {
-		for {
-			select {
-			case m := <-hsb.queue:
-				m.Execute(hsb)
-			case <-ctx.Done():
-				return
-			}
+	for {
+		select {
+		case m := <-hsb.queue:
+			m.Execute(hsb)
+		case <-ctx.Done():
+			return
 		}
-	}()
+	}
 }
 
 func (hsb *HotStuffBase) newViewTimeout() {

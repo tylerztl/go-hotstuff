@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/zhigui-projects/go-hotstuff/pb"
@@ -31,16 +32,16 @@ func main() {
 
 	hsc := pb.NewHotstuffClient(conn)
 	var wg sync.WaitGroup
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 8; i++ {
 		wg.Add(1)
-		go func() {
-			resp, err := hsc.Submit(context.Background(), &pb.SubmitRequest{Cmds: []byte("hello")})
+		go func(i int) {
+			resp, err := hsc.Submit(context.Background(), &pb.SubmitRequest{Cmds: []byte(strconv.Itoa(i))})
 			if err != nil {
 				panic(err)
 			}
 			fmt.Println("submit resp:", resp)
 			wg.Done()
-		}()
+		}(i)
 	}
 	wg.Wait()
 }
