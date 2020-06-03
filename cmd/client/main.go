@@ -32,7 +32,7 @@ func main() {
 
 	hsc := pb.NewHotstuffClient(conn)
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 1000; i++ {
 		wg.Add(1)
 		go func(i int) {
 			resp, err := hsc.Submit(context.Background(), &pb.SubmitRequest{Cmds: []byte(strconv.Itoa(i))})

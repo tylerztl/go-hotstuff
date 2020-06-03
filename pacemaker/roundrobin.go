@@ -56,16 +56,10 @@ func (r *RoundRobinPM) handleEvent() {
 					r.curView = n.(*consensus.HqcUpdateEvent).Qc.ViewNumber
 				}
 			case *consensus.ReceiveNewViewEvent:
-				// TODO 处理多个节点发送的NEW-VIEW
 				if n.(*consensus.ReceiveNewViewEvent).View.ViewNumber > r.curView {
 					r.curView = n.(*consensus.ReceiveNewViewEvent).View.ViewNumber
 				}
-				if len(r.submitC) > 0 {
-					r.StopNewViewTimer()
-					go r.OnBeat()
-				} else {
-					r.StartNewViewTimer()
-				}
+				r.OnReceiveNewView()
 			case *consensus.QcFinishEvent:
 				if r.GetID() == r.GetLeader() {
 					if len(r.submitC) > 0 {
@@ -107,6 +101,16 @@ func (r *RoundRobinPM) OnNextSyncView() {
 		} else {
 			go r.OnNextSyncView()
 		}
+	}
+}
+
+func (r *RoundRobinPM) OnReceiveNewView() {
+	// TODO 处理多个节点发送的NEW-VIEW
+	if len(r.submitC) > 0 {
+		r.StopNewViewTimer()
+		go r.OnBeat()
+	} else {
+		r.StartNewViewTimer()
 	}
 }
 

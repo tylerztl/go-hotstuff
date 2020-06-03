@@ -1,6 +1,8 @@
 package pacemaker
 
 import (
+	"context"
+
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
@@ -8,13 +10,15 @@ import (
 var logger = log.GetLogger("module", "pacemaker")
 
 type PaceMaker interface {
-	Beat() (parentHash, cmds []byte)
+	Run()
 
-	NextSyncView(leader int64)
+	OnBeat()
 
-	ReceiveNewView(viewMsg []byte)
+	OnNextSyncView()
 
-	UpdateHighestQC(qc *pb.QuorumCert)
+	OnReceiveNewView()
 
-	GetLeader(voteHeight int64) int64
+	GetLeader() int64
+
+	Submit(ctx context.Context, req *pb.SubmitRequest) (*pb.SubmitResponse, error)
 }
