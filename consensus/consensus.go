@@ -2,7 +2,6 @@ package consensus
 
 import (
 	"context"
-	"time"
 
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
@@ -10,8 +9,7 @@ import (
 type HotStuffBase struct {
 	*HotStuffCore
 	*NodeManager
-	queue   chan MsgExecutor
-	waitMsg chan struct{}
+	queue chan MsgExecutor
 }
 
 func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer Signer, replicas *ReplicaConf) *HotStuffBase {
@@ -22,7 +20,6 @@ func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer Signer, replicas *R
 	hsb := &HotStuffBase{
 		HotStuffCore: NewHotStuffCore(id, signer, replicas),
 		queue:        make(chan MsgExecutor),
-		waitMsg:      make(chan struct{}),
 	}
 	nodeMgr := NewNodeManager(id, nodes, hsb)
 	hsb.NodeManager = nodeMgr
@@ -35,7 +32,6 @@ func (hsb *HotStuffBase) handleProposal(proposal *pb.Proposal) {
 		logger.Warn("handle propose with empty block", "proposer", proposal.Proposer)
 		return
 	}
-	hsb.waitMsg <- struct{}{}
 
 	if err := hsb.OnReceiveProposal(proposal.Block); err != nil {
 		logger.Warn("handle propose catch error", "error", err)
@@ -59,9 +55,9 @@ func (hsb *HotStuffBase) handleNewView(newView *pb.NewView) {
 		logger.Error("Could not find block of new QC", "error", err)
 		return
 	}
-	hsb.waitMsg <- struct{}{}
+
 	hsb.updateHighestQC(block, newView.GenericQc)
-	hsb.notify(&ReceiveNewView{ViewNumber: newView.ViewNumber, GenericQC: newView.GenericQc})
+	hsb.notify(&ReceiveNewViewEvent{newView})
 }
 
 func (hsb *HotStuffBase) DoBroadcastProposal(proposal *pb.Proposal) {
@@ -83,7 +79,6 @@ func (hsb *HotStuffBase) GetID() int64 {
 func (hsb *HotStuffBase) Start(ctx context.Context) {
 	go hsb.StartServer()
 	hsb.ConnectWorkers(hsb.queue)
-	go hsb.newViewTimeout()
 
 	for {
 		select {
@@ -91,16 +86,6 @@ func (hsb *HotStuffBase) Start(ctx context.Context) {
 			m.Execute(hsb)
 		case <-ctx.Done():
 			return
-		}
-	}
-}
-
-func (hsb *HotStuffBase) newViewTimeout() {
-	for {
-		select {
-		case <-hsb.waitMsg:
-		case <-time.After(time.Second * 3):
-			hsb.notify(&NewViewEvent{})
 		}
 	}
 }

@@ -6,12 +6,12 @@ type ProposeEvent struct {
 	Proposal *pb.Proposal
 }
 
-type DecideEvent struct {
-	Block *pb.Block
+type ReceiveProposalEvent struct {
+	Vote *pb.Vote
 }
 
-type VoteEvent struct {
-	Vote *pb.Vote
+type DecideEvent struct {
+	Block *pb.Block
 }
 
 type QcFinishEvent struct {
@@ -23,12 +23,8 @@ type HqcUpdateEvent struct {
 	Qc *pb.QuorumCert
 }
 
-type NewViewEvent struct {
-}
-
-type ReceiveNewView struct {
-	ViewNumber int64
-	GenericQC  *pb.QuorumCert
+type ReceiveNewViewEvent struct {
+	View *pb.NewView
 }
 
 type MsgExecutor interface {

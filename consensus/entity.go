@@ -6,7 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
@@ -86,11 +85,12 @@ func GetBlockHash(block *pb.Block) []byte {
 	height := make([]byte, 8)
 	binary.LittleEndian.PutUint64(height, uint64(block.Height))
 	toHash = append(toHash, height...)
+	// TODO justify 会被修改造成hash不一致
 	// genesis node
-	if block.Justify != nil {
-		qc, _ := proto.Marshal(block.Justify)
-		toHash = append(toHash, qc...)
-	}
+	//if block.Justify != nil {
+	//	qc, _ := proto.Marshal(block.Justify)
+	//	toHash = append(toHash, qc...)
+	//}
 	toHash = append(toHash, block.Cmds...)
 	hash := sha256.Sum256(toHash)
 	return hash[:]

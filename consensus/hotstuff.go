@@ -3,10 +3,10 @@ package consensus
 import (
 	"bytes"
 	"encoding/hex"
-	"strconv"
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
@@ -77,7 +77,7 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 	// add new block to storage
 	hash := GetBlockHash(newBlock)
 	hsc.blockCache.Store(hex.EncodeToString(hash), newBlock)
-	logger.Debug("create leaf node", "height", newBlock.Height, "hash", hex.EncodeToString(hash))
+	logger.Debug("create leaf node", "view", curView, "height", newBlock.Height, "hash", hex.EncodeToString(hash))
 	// create quorum cert
 	newBlock.SelfQc = &pb.QuorumCert{ViewNumber: curView, BlockHash: hash, Signs: make(map[int64]*pb.PartCert)}
 	err := hsc.update(newBlock)
@@ -85,11 +85,12 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 		return err
 	}
 	// self vote
-	if newBlock.Height <= hsc.voteHeight {
+	// TODO < 是因为存在fork branch
+	if newBlock.Height < hsc.voteHeight {
 		return errors.Errorf("new block should be higher than vote height, newHeight:%d, voteHeight:%d", newBlock.Height, hsc.voteHeight)
 	}
 	hsc.voteHeight = newBlock.Height
-	vote, err := hsc.voteProposal(hash, false)
+	vote, err := hsc.voteProposal(hash)
 	if err != nil {
 		return err
 	}
@@ -97,8 +98,7 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 		return err
 	}
 
-	req, _ := strconv.Atoi(string(cmds))
-	logger.Debug("Proposed new proposal", "cmds", req, "height", newBlock.Height, "parentHash", hex.EncodeToString(parentHash))
+	logger.Debug("Proposed new proposal", "view", curView, "height", newBlock.Height, "cmds", string(cmds), "parentHash", hex.EncodeToString(parentHash))
 	// broadcast proposal to other replicas
 	hsc.notify(&ProposeEvent{&pb.Proposal{Proposer: int64(hsc.id), Block: newBlock}})
 	return nil
@@ -144,21 +144,25 @@ func (hsc *HotStuffCore) OnReceiveProposal(block *pb.Block) error {
 
 	// TODO: qc finish ?
 
-	if _, err := hsc.voteProposal(block.SelfQc.BlockHash, true); err != nil {
+	vote, err := hsc.voteProposal(block.SelfQc.BlockHash)
+	if err != nil {
 		return err
 	}
+
+	// send voteMsg to nextView leader
+	hsc.notify(&ReceiveProposalEvent{vote})
 
 	return nil
 }
 
 func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
 	logger.Debug("enter receive vote", "vote", vote)
+	hsc.mut.Lock()
 	block, err := hsc.getBlockByHash(vote.BlockHash)
 	if err != nil {
 		return err
 	}
 
-	hsc.mut.Lock()
 	if len(block.SelfQc.Signs) >= hsc.replicas.QuorumSize {
 		logger.Debug("receive vote number already satisfied quorum size")
 		hsc.mut.Unlock()
@@ -185,7 +189,7 @@ func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
 	return nil
 }
 
-func (hsc *HotStuffCore) voteProposal(hash []byte, deliver bool) (*pb.Vote, error) {
+func (hsc *HotStuffCore) voteProposal(hash []byte) (*pb.Vote, error) {
 	logger.Debug("enter vote proposal", "hash", hex.EncodeToString(hash))
 	cert, err := hsc.createPartCert(hash)
 	if err != nil {
@@ -195,10 +199,6 @@ func (hsc *HotStuffCore) voteProposal(hash []byte, deliver bool) (*pb.Vote, erro
 		Voter:     int64(hsc.id),
 		BlockHash: hash,
 		Cert:      cert,
-	}
-	if deliver {
-		// send voteMsg to nextView leader
-		hsc.notify(&VoteEvent{vote})
 	}
 
 	return vote, nil
@@ -318,7 +318,7 @@ func (hsc *HotStuffCore) createLeaf(parentHash, cmds []byte, height int64) *pb.B
 		Proposer:   int64(hsc.id),
 		Height:     height,
 		Timestamp:  time.Now().UnixNano(),
-		Justify:    hsc.genericQC,
+		Justify:    proto.Clone(hsc.genericQC).(*pb.QuorumCert),
 	}
 }
 
