@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"encoding/hex"
 
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
@@ -27,15 +28,15 @@ func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer Signer, replicas *R
 }
 
 func (hsb *HotStuffBase) handleProposal(proposal *pb.Proposal) {
-	logger.Debug("handle proposal msg", "proposer", proposal.Proposer, "blockHeight", proposal.Block.Height)
-	if proposal.Block == nil {
-		logger.Warn("handle propose with empty block", "proposer", proposal.Proposer)
+	if proposal == nil || proposal.Block == nil {
+		logger.Warn("handle proposal with empty block")
 		return
 	}
+	logger.Debug("handle proposal", "proposer", proposal.Block.Proposer,
+		"height", proposal.Block.Height, "hash", hex.EncodeToString(proposal.Block.SelfQc.BlockHash))
 
-	if err := hsb.OnReceiveProposal(proposal.Block); err != nil {
-		logger.Warn("handle propose catch error", "error", err)
-		return
+	if err := hsb.OnReceiveProposal(proposal); err != nil {
+		logger.Warn("handle proposal catch error", "error", err)
 	}
 }
 
@@ -72,10 +73,6 @@ func (hsb *HotStuffBase) DoVote(vote *pb.Vote, leader int64) {
 	}
 }
 
-func (hsb *HotStuffBase) GetID() int64 {
-	return int64(hsb.id)
-}
-
 func (hsb *HotStuffBase) Start(ctx context.Context) {
 	go hsb.StartServer()
 	hsb.ConnectWorkers(hsb.queue)
@@ -91,7 +88,7 @@ func (hsb *HotStuffBase) Start(ctx context.Context) {
 }
 
 func (hsb *HotStuffBase) receiveMsg(msg *pb.Message, src ReplicaID) {
-	logger.Debug("received message", "from", src, "to", hsb.GetID(), "msgType", msg.Type)
+	logger.Info("received message", "from", src, "to", hsb.GetID(), "msgType", msg.Type)
 
 	switch msg.GetType().(type) {
 	case *pb.Message_Proposal:

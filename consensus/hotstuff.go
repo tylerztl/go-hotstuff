@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
@@ -77,7 +77,7 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 	// add new block to storage
 	hash := GetBlockHash(newBlock)
 	hsc.blockCache.Store(hex.EncodeToString(hash), newBlock)
-	logger.Debug("create leaf node", "view", curView, "height", newBlock.Height, "hash", hex.EncodeToString(hash))
+	logger.Debug("create leaf node", "view", curView, "height", newBlock.Height, "cmds", string(cmds), "hash", hex.EncodeToString(hash))
 	// create quorum cert
 	newBlock.SelfQc = &pb.QuorumCert{ViewNumber: curView, BlockHash: hash, Signs: make(map[int64]*pb.PartCert)}
 	err := hsc.update(newBlock)
@@ -98,13 +98,14 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 		return err
 	}
 
-	logger.Debug("Proposed new proposal", "view", curView, "height", newBlock.Height, "cmds", string(cmds), "parentHash", hex.EncodeToString(parentHash))
+	logger.Debug("proposed new proposal", "view", curView, "height", newBlock.Height, "cmds", string(cmds), "parentHash", hex.EncodeToString(parentHash))
 	// broadcast proposal to other replicas
 	hsc.notify(&ProposeEvent{&pb.Proposal{Proposer: int64(hsc.id), Block: newBlock}})
 	return nil
 }
 
-func (hsc *HotStuffCore) OnReceiveProposal(block *pb.Block) error {
+func (hsc *HotStuffCore) OnReceiveProposal(prop *pb.Proposal) error {
+	block := prop.Block
 	hsc.blockCache.Store(hex.EncodeToString(block.SelfQc.BlockHash), block)
 
 	if err := hsc.update(block); err != nil {
@@ -356,12 +357,16 @@ func (hsc *HotStuffCore) getBlockByHash(hash []byte) (*pb.Block, error) {
 	return block.(*pb.Block), nil
 }
 
+func (hsc *HotStuffCore) notify(n interface{}) {
+	hsc.notifyChan <- n
+}
+
 func (hsc *HotStuffCore) GetNotifier() <-chan interface{} {
 	return hsc.notifyChan
 }
 
-func (hsc *HotStuffCore) notify(n interface{}) {
-	hsc.notifyChan <- n
+func (hsc *HotStuffCore) GetID() int64 {
+	return int64(hsc.id)
 }
 
 func (hsc *HotStuffCore) GetVoteHeight() int64 {

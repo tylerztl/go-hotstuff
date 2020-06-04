@@ -3,6 +3,7 @@ package pacemaker
 import (
 	"context"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -20,6 +21,7 @@ type RoundRobinPM struct {
 func NewRoundRobinPM(hsb *consensus.HotStuffBase) *RoundRobinPM {
 	rr := &RoundRobinPM{
 		HotStuffBase: hsb,
+		curView:      0,
 		submitC:      make(chan []byte, 10),
 		waitTimer:    time.NewTimer(3 * time.Second),
 	}
@@ -42,31 +44,33 @@ func (r *RoundRobinPM) handleEvent() {
 		case n := <-r.GetNotifier():
 			switch n.(type) {
 			case *consensus.ProposeEvent:
+				if r.GetLeader() != r.GetID() {
+					// 当前节点不是leader，等待下一轮的proposal消息
+					r.startNewViewTimer()
+				} else {
+					// 当前节点是leader，处理proposal消息
+					r.stopNewViewTimer()
+				}
 				go r.DoBroadcastProposal(n.(*consensus.ProposeEvent).Proposal)
-				go r.StartNewViewTimer()
 			case *consensus.ReceiveProposalEvent:
 				if r.GetLeader() != r.GetID() {
-					r.StartNewViewTimer()
+					// 当前节点不是leader，等待下一轮的proposal消息
+					r.startNewViewTimer()
 				} else {
-					r.StopNewViewTimer()
+					// TODO 多节点投票收集
+					// 当前节点是leader，处理proposal消息
+					r.stopNewViewTimer()
 				}
 				go r.DoVote(n.(*consensus.ReceiveProposalEvent).Vote, r.GetLeader())
 			case *consensus.HqcUpdateEvent:
-				if n.(*consensus.HqcUpdateEvent).Qc.ViewNumber > r.curView {
-					r.curView = n.(*consensus.HqcUpdateEvent).Qc.ViewNumber
-				}
+				v := n.(*consensus.HqcUpdateEvent)
+				r.UpdateQcHigh(v.Qc.ViewNumber, v.Qc)
 			case *consensus.ReceiveNewViewEvent:
-				if n.(*consensus.ReceiveNewViewEvent).View.ViewNumber > r.curView {
-					r.curView = n.(*consensus.ReceiveNewViewEvent).View.ViewNumber
-				}
-				r.OnReceiveNewView()
+				r.OnReceiveNewView(n.(*consensus.ReceiveNewViewEvent).View)
 			case *consensus.QcFinishEvent:
-				if r.GetID() == r.GetLeader() {
-					if len(r.submitC) > 0 {
-						go r.OnBeat()
-					} else {
-						go r.OnNextSyncView()
-					}
+				if r.GetID() == r.GetLeader() && len(r.submitC) > 0 {
+					// 与接收到new-view信息重叠
+					go r.OnBeat()
 				} else {
 					go r.OnNextSyncView()
 				}
@@ -85,37 +89,46 @@ func (r *RoundRobinPM) doDecide(block *pb.Block) {
 }
 
 func (r *RoundRobinPM) OnNextSyncView() {
-	go r.StopNewViewTimer()
+	r.stopNewViewTimer()
 	leader := r.GetLeader()
-	r.curView++
-	logger.Debug("enter next view", "view", r.curView, "leader", leader)
-	// 当leader == r.GetID()时，由 ReceiveNewView 事件来触发 propose, 因为可能需要updateHighestQC
+	atomic.AddInt64(&r.curView, 1)
+	logger.Debug("enter next view", "view", atomic.LoadInt64(&r.curView), "leader", leader)
+
 	if leader != r.GetID() {
-		go r.StartNewViewTimer()
+		r.startNewViewTimer()
 		viewMsg := &pb.Message{Type: &pb.Message_NewView{
-			NewView: &pb.NewView{ViewNumber: r.curView, GenericQc: r.GetHighQC()}}}
+			NewView: &pb.NewView{ViewNumber: atomic.LoadInt64(&r.curView), GenericQc: r.GetHighQC()}}}
 		_ = r.UnicastMsg(viewMsg, leader)
 	} else {
 		if len(r.submitC) > 0 {
-			go r.OnBeat()
+			// 当leader == r.GetID()时，由 ReceiveNewView 事件来触发 propose, 因为可能需要updateHighestQC
+			//go r.OnBeat()
 		} else {
 			go r.OnNextSyncView()
 		}
 	}
 }
 
-func (r *RoundRobinPM) OnReceiveNewView() {
+func (r *RoundRobinPM) UpdateQcHigh(viewNumber int64, qc *pb.QuorumCert) {
+	if viewNumber > atomic.LoadInt64(&r.curView) {
+		atomic.StoreInt64(&r.curView, viewNumber)
+	}
+}
+
+func (r *RoundRobinPM) OnReceiveNewView(view *pb.NewView) {
+	r.UpdateQcHigh(view.ViewNumber, view.GenericQc)
+
 	// TODO 处理多个节点发送的NEW-VIEW
 	if len(r.submitC) > 0 {
-		r.StopNewViewTimer()
+		r.stopNewViewTimer()
 		go r.OnBeat()
 	} else {
-		r.StartNewViewTimer()
+		r.startNewViewTimer()
 	}
 }
 
 func (r *RoundRobinPM) GetLeader() int64 {
-	return (r.curView + 1) % int64(len(r.Nodes))
+	return (atomic.LoadInt64(&r.curView) + 1) % int64(len(r.Nodes))
 }
 
 func (r *RoundRobinPM) Submit(ctx context.Context, req *pb.SubmitRequest) (*pb.SubmitResponse, error) {
@@ -132,16 +145,16 @@ func (r *RoundRobinPM) Submit(ctx context.Context, req *pb.SubmitRequest) (*pb.S
 func (r *RoundRobinPM) OnBeat() {
 	select {
 	case s := <-r.submitC:
-		if err := r.OnPropose(r.curView, r.GetHighQC().BlockHash, s); err != nil {
+		if err := r.OnPropose(atomic.LoadInt64(&r.curView), r.GetHighQC().BlockHash, s); err != nil {
 			logger.Error("propose catch error", "error", err)
 		}
 	}
 }
 
-func (r *RoundRobinPM) StartNewViewTimer() {
+func (r *RoundRobinPM) startNewViewTimer() {
 	r.waitTimer.Reset(3 * time.Second)
 }
 
-func (r *RoundRobinPM) StopNewViewTimer() {
+func (r *RoundRobinPM) stopNewViewTimer() {
 	r.waitTimer.Stop()
 }

@@ -20,5 +20,7 @@ type PaceMaker interface {
 
 	GetLeader() int64
 
+	UpdateQcHigh(view int64, qc *pb.QuorumCert)
+
 	Submit(ctx context.Context, req *pb.SubmitRequest) (*pb.SubmitResponse, error)
 }
