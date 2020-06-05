@@ -50,7 +50,7 @@ func (hsb *HotStuffBase) handleVote(vote *pb.Vote) {
 	}
 }
 
-func (hsb *HotStuffBase) handleNewView(newView *pb.NewView) {
+func (hsb *HotStuffBase) handleNewView(id ReplicaID, newView *pb.NewView) {
 	block, err := hsb.getBlockByHash(newView.GenericQc.BlockHash)
 	if err != nil {
 		logger.Error("Could not find block of new QC", "error", err)
@@ -58,7 +58,8 @@ func (hsb *HotStuffBase) handleNewView(newView *pb.NewView) {
 	}
 
 	hsb.updateHighestQC(block, newView.GenericQc)
-	hsb.notify(&ReceiveNewViewEvent{newView})
+
+	hsb.notify(&ReceiveNewViewEvent{int64(id), newView})
 }
 
 func (hsb *HotStuffBase) DoBroadcastProposal(proposal *pb.Proposal) {
@@ -94,7 +95,7 @@ func (hsb *HotStuffBase) receiveMsg(msg *pb.Message, src ReplicaID) {
 	case *pb.Message_Proposal:
 		hsb.handleProposal(msg.GetProposal())
 	case *pb.Message_NewView:
-		hsb.handleNewView(msg.GetNewView())
+		hsb.handleNewView(src, msg.GetNewView())
 	case *pb.Message_Vote:
 		hsb.handleVote(msg.GetVote())
 	}

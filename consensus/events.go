@@ -24,7 +24,8 @@ type HqcUpdateEvent struct {
 }
 
 type ReceiveNewViewEvent struct {
-	View *pb.NewView
+	ReplicaId int64
+	View      *pb.NewView
 }
 
 type MsgExecutor interface {

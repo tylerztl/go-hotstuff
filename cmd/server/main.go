@@ -26,10 +26,24 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgPpKflh9pkNFSsY8c
 9dEr8nLs5RzCboPCmniL/b4QCAPvpFBMLQtcxm/P/FNJYyibPk50BonF
 -----END PRIVATE KEY-----
 `
+	node2 = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgb9DMT9J1IKyO3+Wo
+Bx7SRYfsrJEWDc4+mrUxlbIaEoWhRANCAAQ/8EuFKwymyu2Ge6W8OTdVhKu7JNOh
+JJxfhUoeCQKSq1BhTI/7rVa+8LHchHG0SQm6xDpP/xpR3c7GkFgg72bm
+-----END PRIVATE KEY-----
+`
+	node3 = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgu7eHr3dkU/N/fsM1
+zAGN4EIqg2IeglBjXQKe3neICwChRANCAARmsvIihcHs6eGHmbx+pa+1K9vOV+OC
+2LTobiPYjEBdXf/vGbsF4y1pS4VuwZYWxkfm2eqrajGDjnDIywly7tVe
+-----END PRIVATE KEY-----
+`
 )
 
 var replica0PK ecdsa.PrivateKey
 var replica1PK ecdsa.PrivateKey
+var replica2PK ecdsa.PrivateKey
+var replica3PK ecdsa.PrivateKey
 
 // The main command describes the service and
 // defaults to printing the help message.
@@ -63,11 +77,23 @@ func initCmd(cmd *cobra.Command, args []string) {
 
 	replica0PK = *pk0.(*ecdsa.PrivateKey)
 
-	pk1, err := crypto.ParsePrivateKey([]byte(node0))
+	pk1, err := crypto.ParsePrivateKey([]byte(node1))
 	if err != nil {
 		panic(err)
 	}
 	replica1PK = *pk1.(*ecdsa.PrivateKey)
+
+	pk2, err := crypto.ParsePrivateKey([]byte(node2))
+	if err != nil {
+		panic(err)
+	}
+	replica2PK = *pk2.(*ecdsa.PrivateKey)
+
+	pk3, err := crypto.ParsePrivateKey([]byte(node3))
+	if err != nil {
+		panic(err)
+	}
+	replica3PK = *pk3.(*ecdsa.PrivateKey)
 }
 
 func startCmd() *cobra.Command {
@@ -100,13 +126,25 @@ var nodes = []*consensus.NodeInfo{
 		Addr:    "127.0.0.1:8001",
 		TlsOpts: nil,
 	},
+	{
+		Id:      2,
+		Addr:    "127.0.0.1:8002",
+		TlsOpts: nil,
+	},
+	{
+		Id:      3,
+		Addr:    "127.0.0.1:8003",
+		TlsOpts: nil,
+	},
 }
 
 var replicas = &consensus.ReplicaConf{
-	QuorumSize: 2,
+	QuorumSize: 3,
 	Replicas: map[consensus.ReplicaID]*consensus.ReplicaInfo{
 		0: {ID: 0, Verifier: &crypto.ECDSAVerifier{Pub: &replica0PK.PublicKey}},
 		1: {ID: 1, Verifier: &crypto.ECDSAVerifier{Pub: &replica1PK.PublicKey}},
+		2: {ID: 2, Verifier: &crypto.ECDSAVerifier{Pub: &replica2PK.PublicKey}},
+		3: {ID: 3, Verifier: &crypto.ECDSAVerifier{Pub: &replica3PK.PublicKey}},
 	},
 }
 
@@ -119,6 +157,10 @@ func serve(args []string) error {
 		signer = &replica0PK
 	} else if replicaId == 1 {
 		signer = &replica1PK
+	} else if replicaId == 2 {
+		signer = &replica2PK
+	} else if replicaId == 3 {
+		signer = &replica3PK
 	}
 	hsb := consensus.NewHotStuffBase(consensus.ReplicaID(replicaId), nodes, &crypto.ECDSASigner{Pri: signer}, replicas)
 	rr := pacemaker.NewRoundRobinPM(hsb)

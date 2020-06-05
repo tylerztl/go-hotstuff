@@ -29,6 +29,16 @@ make build
 ./output/hotstuff-server start --replicaId 1 -p 8001
 ```
 
+### run replica 2 on new terminal
+```
+./output/hotstuff-server start --replicaId 2 -p 8002
+```
+
+### run replica 3 on new terminal
+```
+./output/hotstuff-server start --replicaId 3 -p 8003
+```
+
 ### run client to send proposal request
 ```
 ./output/hotstuff-client --server 127.0.0.1:8000

@@ -380,3 +380,7 @@ func (hsc *HotStuffCore) GetHighQC() *pb.QuorumCert {
 	defer hsc.mut.Unlock()
 	return hsc.genericQC
 }
+
+func (hsc *HotStuffCore) GetReplicas() *ReplicaConf {
+	return hsc.replicas
+}

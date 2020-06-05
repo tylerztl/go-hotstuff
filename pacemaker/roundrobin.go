@@ -14,6 +14,7 @@ import (
 type RoundRobinPM struct {
 	*consensus.HotStuffBase
 	curView   int64
+	views     map[int64]map[int64]*pb.NewView // ViewNumber ~ ReplicaID
 	submitC   chan []byte
 	waitTimer *time.Timer
 }
@@ -22,6 +23,7 @@ func NewRoundRobinPM(hsb *consensus.HotStuffBase) *RoundRobinPM {
 	rr := &RoundRobinPM{
 		HotStuffBase: hsb,
 		curView:      0,
+		views:        make(map[int64]map[int64]*pb.NewView),
 		submitC:      make(chan []byte, 10),
 		waitTimer:    time.NewTimer(3 * time.Second),
 	}
@@ -66,7 +68,8 @@ func (r *RoundRobinPM) handleEvent() {
 				v := n.(*consensus.HqcUpdateEvent)
 				r.UpdateQcHigh(v.Qc.ViewNumber, v.Qc)
 			case *consensus.ReceiveNewViewEvent:
-				r.OnReceiveNewView(n.(*consensus.ReceiveNewViewEvent).View)
+				v := n.(*consensus.ReceiveNewViewEvent)
+				r.OnReceiveNewView(v.ReplicaId, v.View)
 			case *consensus.QcFinishEvent:
 				if r.GetID() == r.GetLeader() && len(r.submitC) > 0 {
 					// 与接收到new-view信息重叠
@@ -115,10 +118,39 @@ func (r *RoundRobinPM) UpdateQcHigh(viewNumber int64, qc *pb.QuorumCert) {
 	}
 }
 
-func (r *RoundRobinPM) OnReceiveNewView(view *pb.NewView) {
-	r.UpdateQcHigh(view.ViewNumber, view.GenericQc)
+func (r *RoundRobinPM) OnReceiveNewView(id int64, newView *pb.NewView) {
+	r.UpdateQcHigh(newView.ViewNumber, newView.GenericQc)
 
-	// TODO 处理多个节点发送的NEW-VIEW
+	var highView *pb.NewView
+	if views, ok := r.views[newView.ViewNumber]; ok {
+		if len(views) >= r.GetReplicas().QuorumSize {
+			return
+		}
+		if view, ok := views[id]; ok {
+			if view.GenericQc.ViewNumber > newView.GenericQc.ViewNumber {
+				views[id] = newView
+			}
+		} else {
+			views[id] = newView
+			if len(views) == r.GetReplicas().QuorumSize {
+				for _, v := range views {
+					if highView == nil {
+						highView = v
+					} else if v.ViewNumber > highView.ViewNumber {
+						highView = v
+					}
+				}
+			}
+		}
+	} else {
+		r.views[newView.ViewNumber] = make(map[int64]*pb.NewView)
+		r.views[newView.ViewNumber][id] = newView
+	}
+
+	if highView == nil {
+		return
+	}
+
 	if len(r.submitC) > 0 {
 		r.stopNewViewTimer()
 		go r.OnBeat()
