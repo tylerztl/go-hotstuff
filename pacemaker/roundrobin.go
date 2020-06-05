@@ -95,7 +95,8 @@ func (r *RoundRobinPM) OnNextSyncView() {
 	} else {
 		if len(r.submitC) > 0 {
 			// 当leader == r.GetID()时，由 ReceiveNewView 事件来触发 propose, 因为可能需要updateHighestQC
-			//go r.OnBeat()
+			viewMsg := &pb.NewView{ViewNumber: atomic.LoadInt64(&r.curView), GenericQc: r.hqc()}
+			r.OnReceiveNewView(r.replicaId, viewMsg)
 		} else {
 			go r.OnNextSyncView()
 		}
@@ -124,8 +125,6 @@ func (r *RoundRobinPM) OnReceiveProposal(vote *pb.Vote) {
 }
 
 func (r *RoundRobinPM) OnReceiveNewView(id int64, newView *pb.NewView) {
-	r.UpdateQcHigh(newView.ViewNumber, newView.GenericQc)
-
 	var highView *pb.NewView
 	if views, ok := r.views[newView.ViewNumber]; ok {
 		if len(views) >= utils.GetQuorumSize(r.metadata) {
@@ -156,10 +155,13 @@ func (r *RoundRobinPM) OnReceiveNewView(id int64, newView *pb.NewView) {
 		return
 	}
 
+	r.UpdateQcHigh(newView.ViewNumber, newView.GenericQc)
+
 	if len(r.submitC) > 0 {
 		r.stopNewViewTimer()
 		go r.OnBeat()
 	} else {
+		// TODO
 		r.startNewViewTimer()
 	}
 }
