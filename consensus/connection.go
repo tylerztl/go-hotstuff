@@ -22,7 +22,7 @@ type NodeManager struct {
 	Nodes map[ReplicaID]*NodeInfo
 }
 
-func NewNodeManager(id ReplicaID, replicas []*NodeInfo, hsb *HotStuffBase) *NodeManager {
+func NewNodeManager(id ReplicaID, replicas []*NodeInfo) *NodeManager {
 	mgr := &NodeManager{
 		Nodes: make(map[ReplicaID]*NodeInfo, len(replicas)),
 	}

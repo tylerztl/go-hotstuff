@@ -1,0 +1,7 @@
+package utils
+
+import "github.com/zhigui-projects/go-hotstuff/pb"
+
+func GetQuorumSize(metadata *pb.ConfigMetadata) int {
+	return int(metadata.N - metadata.F)
+}

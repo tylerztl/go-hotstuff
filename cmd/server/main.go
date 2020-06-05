@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/zhigui-projects/go-hotstuff/common/crypto"
 	"github.com/zhigui-projects/go-hotstuff/consensus"
 	"github.com/zhigui-projects/go-hotstuff/pacemaker"
+	"github.com/zhigui-projects/go-hotstuff/pb"
 )
 
 const (
@@ -162,9 +164,11 @@ func serve(args []string) error {
 	} else if replicaId == 3 {
 		signer = &replica3PK
 	}
+
 	hsb := consensus.NewHotStuffBase(consensus.ReplicaID(replicaId), nodes, &crypto.ECDSASigner{Pri: signer}, replicas)
-	rr := pacemaker.NewRoundRobinPM(hsb)
-	rr.Run()
+	rr := pacemaker.NewRoundRobinPM(replicaId, &pb.ConfigMetadata{N: 4, F: 1, MsgWaitTimeout: 3}, hsb.GetHighQC, hsb.OnPropose, hsb.BroadcastServer)
+	hsb.ApplyPaceMaker(rr)
+	go hsb.Start(context.Background())
 
 	<-signals
 	return nil

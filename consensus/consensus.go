@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/hex"
 
+	"github.com/pkg/errors"
+	"github.com/zhigui-projects/go-hotstuff/pacemaker"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
 
 type HotStuffBase struct {
+	pacemaker.PaceMaker
 	*HotStuffCore
 	*NodeManager
 	queue chan MsgExecutor
@@ -18,13 +21,18 @@ func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer Signer, replicas *R
 		logger.Error("not found hotstuff replica node info")
 		return nil
 	}
+
 	hsb := &HotStuffBase{
 		HotStuffCore: NewHotStuffCore(id, signer, replicas),
+		NodeManager:  NewNodeManager(id, nodes),
 		queue:        make(chan MsgExecutor),
 	}
-	nodeMgr := NewNodeManager(id, nodes, hsb)
-	hsb.NodeManager = nodeMgr
+	pb.RegisterHotstuffServer(hsb.Server(), hsb)
 	return hsb
+}
+
+func (hsb *HotStuffBase) ApplyPaceMaker(pm pacemaker.PaceMaker) {
+	hsb.PaceMaker = pm
 }
 
 func (hsb *HotStuffBase) handleProposal(proposal *pb.Proposal) {
@@ -35,7 +43,7 @@ func (hsb *HotStuffBase) handleProposal(proposal *pb.Proposal) {
 	logger.Debug("handle proposal", "proposer", proposal.Block.Proposer,
 		"height", proposal.Block.Height, "hash", hex.EncodeToString(proposal.Block.SelfQc.BlockHash))
 
-	if err := hsb.OnReceiveProposal(proposal); err != nil {
+	if err := hsb.HotStuffCore.OnReceiveProposal(proposal); err != nil {
 		logger.Warn("handle proposal catch error", "error", err)
 	}
 }
@@ -62,29 +70,49 @@ func (hsb *HotStuffBase) handleNewView(id ReplicaID, newView *pb.NewView) {
 	hsb.notify(&ReceiveNewViewEvent{int64(id), newView})
 }
 
-func (hsb *HotStuffBase) DoBroadcastProposal(proposal *pb.Proposal) {
-	_ = hsb.BroadcastMsg(&pb.Message{Type: &pb.Message_Proposal{Proposal: proposal}})
-}
-
 func (hsb *HotStuffBase) DoVote(vote *pb.Vote, leader int64) {
 	if leader != hsb.GetID() {
-		_ = hsb.UnicastMsg(&pb.Message{Type: &pb.Message_Vote{Vote: vote}}, leader)
+		if err := hsb.UnicastMsg(&pb.Message{Type: &pb.Message_Vote{Vote: vote}}, leader); err != nil {
+			logger.Error("do vote error when unicast msg", "to", leader)
+		}
 	} else {
-		_ = hsb.OnReceiveVote(vote)
+		if err := hsb.OnReceiveVote(vote); err != nil {
+			logger.Warn("do vote error when receive vote", "to", leader)
+		}
 	}
 }
 
 func (hsb *HotStuffBase) Start(ctx context.Context) {
+	if hsb.PaceMaker == nil {
+		panic("pacemaker is nil, please set pacemaker")
+	}
+
 	go hsb.StartServer()
-	hsb.ConnectWorkers(hsb.queue)
+	go hsb.ConnectWorkers(hsb.queue)
+	go hsb.Run()
 
 	for {
 		select {
 		case m := <-hsb.queue:
-			m.Execute(hsb)
+			m.ExecuteMessage(hsb)
+		case n := <-hsb.GetNotifier():
+			n.ExecuteEvent(hsb)
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+func (hsb *HotStuffBase) Submit(ctx context.Context, req *pb.SubmitRequest) (*pb.SubmitResponse, error) {
+	logger.Debug("receive new submit request", "cmds", string(req.Cmds))
+	if len(req.Cmds) == 0 {
+		return &pb.SubmitResponse{Status: pb.Status_BAD_REQUEST}, errors.New("request data is empty")
+	}
+
+	if err := hsb.PaceMaker.Submit(req.Cmds); err != nil {
+		return &pb.SubmitResponse{Status: pb.Status_SERVICE_UNAVAILABLE}, err
+	} else {
+		return &pb.SubmitResponse{Status: pb.Status_SUCCESS}, nil
 	}
 }
 

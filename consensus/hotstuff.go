@@ -39,7 +39,7 @@ type HotStuffCore struct {
 
 	replicas *ReplicaConf
 
-	notifyChan chan interface{}
+	notifyChan chan EventNotifier
 }
 
 func NewHotStuffCore(id ReplicaID, signer Signer, replicas *ReplicaConf) *HotStuffCore {
@@ -56,7 +56,7 @@ func NewHotStuffCore(id ReplicaID, signer Signer, replicas *ReplicaConf) *HotStu
 		id:           id,
 		signer:       signer,
 		replicas:     replicas,
-		notifyChan:   make(chan interface{}, 10),
+		notifyChan:   make(chan EventNotifier, 10),
 	}
 	genesis.SelfQc = &pb.QuorumCert{ViewNumber: 0, BlockHash: hash, Signs: make(map[int64]*pb.PartCert)}
 	hsc.genericQC = genesis.SelfQc
@@ -357,11 +357,11 @@ func (hsc *HotStuffCore) getBlockByHash(hash []byte) (*pb.Block, error) {
 	return block.(*pb.Block), nil
 }
 
-func (hsc *HotStuffCore) notify(n interface{}) {
+func (hsc *HotStuffCore) notify(n EventNotifier) {
 	hsc.notifyChan <- n
 }
 
-func (hsc *HotStuffCore) GetNotifier() <-chan interface{} {
+func (hsc *HotStuffCore) GetNotifier() <-chan EventNotifier {
 	return hsc.notifyChan
 }
 

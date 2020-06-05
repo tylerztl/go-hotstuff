@@ -67,6 +67,15 @@ message Vote {
     PartCert cert = 3;
 }
 
+message ConfigMetadata {
+    // Number of nodes
+    int64 n = 1;
+    // Fault tolerance
+    int64 f = 2;
+    // Timeout of msg wait (seconds)
+    int64 msg_wait_timeout = 3;
+}
+
 // These status codes are intended to resemble selected HTTP status codes
 enum Status {
     UNKNOWN = 0;
