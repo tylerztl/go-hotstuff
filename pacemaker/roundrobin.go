@@ -1,6 +1,7 @@
 package pacemaker
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -9,9 +10,6 @@ import (
 	"github.com/zhigui-projects/go-hotstuff/pb"
 	"github.com/zhigui-projects/go-hotstuff/transport"
 )
-
-type GetHqcFunc func() *pb.QuorumCert
-type ProposeFunc func(curView int64, parentHash, cmds []byte) error
 
 type RoundRobinPM struct {
 	transport.BroadcastServer
@@ -24,10 +22,12 @@ type RoundRobinPM struct {
 	doneC       chan struct{} // Closes when the consensus halts
 	waitTimer   *time.Timer
 	hqc         GetHqcFunc
+	hqcUpdate   UpdateQCHighFunc
 	proposeFunc ProposeFunc
+	mut         *sync.Mutex
 }
 
-func NewRoundRobinPM(replicaId int64, metadata *pb.ConfigMetadata, hqc GetHqcFunc,
+func NewRoundRobinPM(replicaId int64, metadata *pb.ConfigMetadata, hqc GetHqcFunc, hqcUpdate UpdateQCHighFunc,
 	proposeFunc ProposeFunc, bs transport.BroadcastServer) *RoundRobinPM {
 	waitTimer := time.NewTimer(time.Duration(metadata.MsgWaitTimeout) * time.Second)
 	waitTimer.Stop()
@@ -42,11 +42,14 @@ func NewRoundRobinPM(replicaId int64, metadata *pb.ConfigMetadata, hqc GetHqcFun
 		doneC:           make(chan struct{}),
 		waitTimer:       waitTimer,
 		hqc:             hqc,
+		hqcUpdate:       hqcUpdate,
 		proposeFunc:     proposeFunc,
+		mut:             new(sync.Mutex),
 	}
 }
 
 func (r *RoundRobinPM) Run() {
+	// bootstrap node
 	if r.replicaId == 0 {
 		go r.OnBeat()
 	}
@@ -96,9 +99,9 @@ func (r *RoundRobinPM) OnNextSyncView() {
 		if len(r.submitC) > 0 {
 			// 当leader == r.GetID()时，由 ReceiveNewView 事件来触发 propose, 因为可能需要updateHighestQC
 			viewMsg := &pb.NewView{ViewNumber: atomic.LoadInt64(&r.curView), GenericQc: r.hqc()}
-			r.OnReceiveNewView(r.replicaId, viewMsg)
+			r.OnReceiveNewView(r.replicaId, nil, viewMsg)
 		} else {
-			go r.OnNextSyncView()
+			r.startNewViewTimer()
 		}
 	}
 }
@@ -108,12 +111,16 @@ func (r *RoundRobinPM) OnProposeEvent(proposal *pb.Proposal) {
 		// 当前节点不是leader，等待下一轮的proposal消息
 		r.startNewViewTimer()
 	} else {
-		// 当前节点是leader，处理proposal消息
+		// 当前节点是leader，QcFinish处理proposal消息
 		r.stopNewViewTimer()
 	}
 }
 
 func (r *RoundRobinPM) OnReceiveProposal(vote *pb.Vote) {
+	if vote.ViewNumber > atomic.LoadInt64(&r.curView) {
+		atomic.StoreInt64(&r.curView, vote.ViewNumber)
+	}
+
 	if r.GetLeader() != r.replicaId {
 		// 当前节点不是leader，等待下一轮的proposal消息
 		r.startNewViewTimer()
@@ -124,10 +131,41 @@ func (r *RoundRobinPM) OnReceiveProposal(vote *pb.Vote) {
 	}
 }
 
-func (r *RoundRobinPM) OnReceiveNewView(id int64, newView *pb.NewView) {
+func (r *RoundRobinPM) OnReceiveNewView(id int64, block *pb.Block, newView *pb.NewView) {
+	logger.Info("view info", "genericView", newView.GetGenericQc().ViewNumber, "hqcView", r.hqc().ViewNumber,
+		"viewNumber", newView.ViewNumber, "curView", r.curView)
+
+	if newView.ViewNumber < atomic.LoadInt64(&r.curView) {
+		return
+	}
+
+	if newView.GetGenericQc().ViewNumber > r.hqc().ViewNumber {
+		if block != nil {
+			r.hqcUpdate(block, newView.GenericQc)
+		}
+		r.UpdateQcHigh(newView.ViewNumber, newView.GenericQc)
+		if len(r.submitC) > 0 {
+			r.stopNewViewTimer()
+			go r.OnBeat()
+		} else {
+			go r.OnNextSyncView()
+		}
+		return
+	} else if newView.ViewNumber > atomic.LoadInt64(&r.curView) {
+		// 副本间同步view number
+		r.startNewViewTimer()
+		atomic.StoreInt64(&r.curView, newView.ViewNumber)
+		viewMsg := &pb.Message{Type: &pb.Message_NewView{
+			NewView: &pb.NewView{ViewNumber: atomic.LoadInt64(&r.curView), GenericQc: r.hqc()}}}
+		_ = r.BroadcastMsg(viewMsg)
+		return
+	}
+
+	r.mut.Lock()
 	var highView *pb.NewView
 	if views, ok := r.views[newView.ViewNumber]; ok {
 		if len(views) >= utils.GetQuorumSize(r.metadata) {
+			r.mut.Unlock()
 			return
 		}
 		if view, ok := views[id]; ok {
@@ -152,24 +190,36 @@ func (r *RoundRobinPM) OnReceiveNewView(id int64, newView *pb.NewView) {
 	}
 
 	if highView == nil {
+		r.mut.Unlock()
 		return
 	}
 
-	r.UpdateQcHigh(newView.ViewNumber, newView.GenericQc)
+	if block != nil {
+		r.hqcUpdate(block, newView.GenericQc)
+	}
+
+	r.UpdateQcHigh(highView.ViewNumber, highView.GenericQc)
+	r.mut.Unlock()
 
 	if len(r.submitC) > 0 {
 		r.stopNewViewTimer()
 		go r.OnBeat()
 	} else {
-		// TODO
 		r.startNewViewTimer()
 	}
 }
 
 func (r *RoundRobinPM) OnQcFinishEvent() {
-	if r.replicaId == r.GetLeader() && len(r.submitC) > 0 {
-		// 与接收到new-view信息重叠
-		go r.OnBeat()
+	if r.replicaId == r.GetLeader() {
+		atomic.AddInt64(&r.curView, 1)
+		if len(r.submitC) > 0 {
+			r.stopNewViewTimer()
+			// view更新在hqc
+			go r.OnBeat()
+		} else {
+			logger.Debug("enter next view", "view", atomic.LoadInt64(&r.curView), "leader", r.GetLeader())
+			go r.OnNextSyncView()
+		}
 	} else {
 		go r.OnNextSyncView()
 	}

@@ -65,9 +65,9 @@ func (hsb *HotStuffBase) handleNewView(id ReplicaID, newView *pb.NewView) {
 		return
 	}
 
-	hsb.updateHighestQC(block, newView.GenericQc)
+	//hsb.UpdateHighestQC(block, newView.GenericQc)
 
-	hsb.notify(&ReceiveNewViewEvent{int64(id), newView})
+	hsb.notify(&ReceiveNewViewEvent{int64(id), block, newView})
 }
 
 func (hsb *HotStuffBase) DoVote(vote *pb.Vote, leader int64) {
@@ -94,9 +94,9 @@ func (hsb *HotStuffBase) Start(ctx context.Context) {
 	for {
 		select {
 		case m := <-hsb.queue:
-			m.ExecuteMessage(hsb)
+			go m.ExecuteMessage(hsb)
 		case n := <-hsb.GetNotifier():
-			n.ExecuteEvent(hsb)
+			go n.ExecuteEvent(hsb)
 		case <-ctx.Done():
 			return
 		}

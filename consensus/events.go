@@ -28,11 +28,12 @@ func (r *ReceiveProposalEvent) ExecuteEvent(base *HotStuffBase) {
 
 type ReceiveNewViewEvent struct {
 	ReplicaId int64
+	Block     *pb.Block
 	View      *pb.NewView
 }
 
 func (r *ReceiveNewViewEvent) ExecuteEvent(base *HotStuffBase) {
-	base.OnReceiveNewView(r.ReplicaId, r.View)
+	base.OnReceiveNewView(r.ReplicaId, r.Block, r.View)
 }
 
 type QcFinishEvent struct {

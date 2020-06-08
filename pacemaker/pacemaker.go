@@ -7,6 +7,10 @@ import (
 
 var logger = log.GetLogger("module", "pacemaker")
 
+type GetHqcFunc func() *pb.QuorumCert
+type UpdateQCHighFunc func(block *pb.Block, qc *pb.QuorumCert)
+type ProposeFunc func(curView int64, parentHash, cmds []byte) error
+
 type PaceMaker interface {
 	// 启动pacemaker
 	Run()
@@ -23,7 +27,7 @@ type PaceMaker interface {
 	// 监听到接收到其他节点发来的proposal消息的事件
 	OnReceiveProposal(vote *pb.Vote)
 	// 监听到接收到其他节点发来的new view消息的事件
-	OnReceiveNewView(id int64, newView *pb.NewView)
+	OnReceiveNewView(id int64, block *pb.Block, newView *pb.NewView)
 	// 收集到n-f个proposal vote事件
 	OnQcFinishEvent()
 	// highest qc 更新事件

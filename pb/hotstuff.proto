@@ -53,18 +53,20 @@ message NewView {
 
 // broadcast proposal to other replicas
 message Proposal {
-    int64 proposer = 1;
-    Block block = 2;
+    int64 view_number = 1;
+    int64 proposer = 2;
+    Block block = 3;
 }
 
 // Vote messages
 message Vote {
+    int64 view_number = 1;
     // Voter replica id
-    int64 voter = 1;
+    int64 voter = 2;
     // The hash of block being voted
-    bytes block_hash = 2;
+    bytes block_hash = 3;
     // Proof of validity for the vote
-    PartCert cert = 3;
+    PartCert cert = 4;
 }
 
 message ConfigMetadata {

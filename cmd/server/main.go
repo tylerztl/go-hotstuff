@@ -166,7 +166,7 @@ func serve(args []string) error {
 	}
 
 	hsb := consensus.NewHotStuffBase(consensus.ReplicaID(replicaId), nodes, &crypto.ECDSASigner{Pri: signer}, replicas)
-	rr := pacemaker.NewRoundRobinPM(replicaId, &pb.ConfigMetadata{N: 4, F: 1, MsgWaitTimeout: 3}, hsb.GetHighQC, hsb.OnPropose, hsb.BroadcastServer)
+	rr := pacemaker.NewRoundRobinPM(replicaId, &pb.ConfigMetadata{N: 4, F: 1, MsgWaitTimeout: 3}, hsb.GetHighQC, hsb.UpdateHighestQC, hsb.OnPropose, hsb.BroadcastServer)
 	hsb.ApplyPaceMaker(rr)
 	go hsb.Start(context.Background())
 

@@ -12,11 +12,9 @@ import (
 )
 
 func main() {
-	var replicaId int64
 	var serverAddr string
 	var tlsEnabled bool
 
-	flag.Int64Var(&replicaId, "replicaId", 1, "connect hotstuff node replica id")
 	flag.StringVar(&serverAddr, "server", "127.0.0.1:8000", "The RPC server to connect to.")
 	flag.BoolVar(&tlsEnabled, "tls", false, "Use TLS when communicating with the hotstuff node endpoint")
 	flag.Parse()
@@ -32,7 +30,7 @@ func main() {
 
 	hsc := pb.NewHotstuffClient(conn)
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func(i int) {
 			resp, err := hsc.Submit(context.Background(), &pb.SubmitRequest{Cmds: []byte(strconv.Itoa(i))})
