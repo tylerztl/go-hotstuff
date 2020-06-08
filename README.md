@@ -21,7 +21,7 @@ make build
 
 ### run replica 0
 ```
-./output/hotstuff-server start
+./output/hotstuff-server start --replicaId 0 -p 8000
 ```
 
 ### run replica 1 on new terminal

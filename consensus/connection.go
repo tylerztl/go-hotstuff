@@ -47,11 +47,12 @@ func NewNodeManager(id ReplicaID, replicas []*NodeInfo) *NodeManager {
 }
 
 func (n *NodeManager) StartServer() {
+	logger.Info("Hotstuff node started, beginning to serve requests", "replicaId", n.Self.Id, "serverAddress", n.Self.Addr)
+
 	if err := n.Start(); err != nil {
 		logger.Error(" Hotstuff node server start failed", "error", err)
 		panic(err)
 	}
-	logger.Info("Hotstuff node started, beginning to serve requests", "replicaId", n.Self.Id, "serverAddress", n.Self.Addr)
 }
 
 func (n *NodeManager) ConnectWorkers(queue chan<- MsgExecutor) {

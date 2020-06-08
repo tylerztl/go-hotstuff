@@ -17,13 +17,15 @@ func (p *ProposeEvent) ExecuteEvent(base *HotStuffBase) {
 }
 
 type ReceiveProposalEvent struct {
-	Vote *pb.Vote
+	Proposal *pb.Proposal
+	Vote     *pb.Vote
 }
 
 func (r *ReceiveProposalEvent) ExecuteEvent(base *HotStuffBase) {
-	base.PaceMaker.OnReceiveProposal(r.Vote)
+	// 注意：必须先执行OnReceiveProposal，更新状态后doVote
+	base.PaceMaker.OnReceiveProposal(r.Proposal, r.Vote)
 	// 接收到Proposal投票后，判断当前节点是不是下一轮的leader，如果是leader，处理投票结果；如果不是leader，发送给下个leader
-	go base.DoVote(r.Vote, base.GetLeader())
+	go base.DoVote(r.Vote, base.GetLeader(r.Proposal.ViewNumber))
 }
 
 type ReceiveNewViewEvent struct {

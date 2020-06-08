@@ -56,7 +56,7 @@ func NewHotStuffCore(id ReplicaID, signer Signer, replicas *ReplicaConf) *HotStu
 		id:           id,
 		signer:       signer,
 		replicas:     replicas,
-		notifyChan:   make(chan EventNotifier, 10),
+		notifyChan:   make(chan EventNotifier),
 	}
 	genesis.SelfQc = &pb.QuorumCert{ViewNumber: -1, BlockHash: hash, Signs: make(map[int64]*pb.PartCert)}
 	hsc.genericQC = genesis.SelfQc
@@ -85,7 +85,7 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 		return err
 	}
 	// self vote
-	// TODO < 是因为存在fork branch
+	// TODO 小于是可能存在fork branch
 	if newBlock.Height < hsc.voteHeight {
 		return errors.Errorf("new block should be higher than vote height, newHeight:%d, voteHeight:%d", newBlock.Height, hsc.voteHeight)
 	}
@@ -143,15 +143,13 @@ func (hsc *HotStuffCore) OnReceiveProposal(prop *pb.Proposal) error {
 	}
 	hsc.mut.Unlock()
 
-	// TODO: qc finish ?
-
 	vote, err := hsc.voteProposal(prop.ViewNumber, block.SelfQc.BlockHash)
 	if err != nil {
 		return err
 	}
 
 	// send voteMsg to nextView leader
-	hsc.notify(&ReceiveProposalEvent{vote})
+	hsc.notify(&ReceiveProposalEvent{prop, vote})
 
 	return nil
 }

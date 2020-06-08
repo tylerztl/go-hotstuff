@@ -18,13 +18,13 @@ type RoundRobinPM struct {
 	metadata    *pb.ConfigMetadata
 	curView     int64
 	views       map[int64]map[int64]*pb.NewView // ViewNumber ~ ReplicaID
+	mut         *sync.Mutex
 	submitC     chan []byte
 	doneC       chan struct{} // Closes when the consensus halts
 	waitTimer   *time.Timer
 	hqc         GetHqcFunc
 	hqcUpdate   UpdateQCHighFunc
 	proposeFunc ProposeFunc
-	mut         *sync.Mutex
 }
 
 func NewRoundRobinPM(replicaId int64, metadata *pb.ConfigMetadata, hqc GetHqcFunc, hqcUpdate UpdateQCHighFunc,
@@ -38,13 +38,13 @@ func NewRoundRobinPM(replicaId int64, metadata *pb.ConfigMetadata, hqc GetHqcFun
 		metadata:        metadata,
 		curView:         0,
 		views:           make(map[int64]map[int64]*pb.NewView),
-		submitC:         make(chan []byte, 10),
+		mut:             new(sync.Mutex),
+		submitC:         make(chan []byte, 100),
 		doneC:           make(chan struct{}),
 		waitTimer:       waitTimer,
 		hqc:             hqc,
 		hqcUpdate:       hqcUpdate,
 		proposeFunc:     proposeFunc,
-		mut:             new(sync.Mutex),
 	}
 }
 
@@ -80,13 +80,12 @@ func (r *RoundRobinPM) OnBeat() {
 	}
 }
 
-func (r *RoundRobinPM) GetLeader() int64 {
-	return (atomic.LoadInt64(&r.curView) + 1) % r.metadata.N
+func (r *RoundRobinPM) GetLeader(view int64) int64 {
+	return (view + 1) % r.metadata.N
 }
 
 func (r *RoundRobinPM) OnNextSyncView() {
-	r.stopNewViewTimer()
-	leader := r.GetLeader()
+	leader := r.GetLeader(atomic.LoadInt64(&r.curView))
 	atomic.AddInt64(&r.curView, 1)
 	logger.Debug("enter next view", "view", atomic.LoadInt64(&r.curView), "leader", leader)
 
@@ -104,35 +103,36 @@ func (r *RoundRobinPM) OnNextSyncView() {
 			r.startNewViewTimer()
 		}
 	}
+	r.clearViews()
 }
 
 func (r *RoundRobinPM) OnProposeEvent(proposal *pb.Proposal) {
-	if r.GetLeader() != r.replicaId {
+	if r.GetLeader(atomic.LoadInt64(&r.curView)) != r.replicaId {
 		// 当前节点不是leader，等待下一轮的proposal消息
 		r.startNewViewTimer()
+	} else {
+		// 当前节点是leader，QcFinish处理proposal消息
+		//r.stopNewViewTimer()
+	}
+}
+
+func (r *RoundRobinPM) OnReceiveProposal(proposal *pb.Proposal, vote *pb.Vote) {
+	// TODO 副本hqc落后
+	if proposal.ViewNumber > atomic.LoadInt64(&r.curView) {
+		atomic.StoreInt64(&r.curView, proposal.ViewNumber)
+	}
+
+	if r.GetLeader(atomic.LoadInt64(&r.curView)) != r.replicaId {
+		// 当前节点不是leader，等待下一轮的proposal消息
+		//r.startNewViewTimer()
 	} else {
 		// 当前节点是leader，QcFinish处理proposal消息
 		r.stopNewViewTimer()
 	}
 }
 
-func (r *RoundRobinPM) OnReceiveProposal(vote *pb.Vote) {
-	if vote.ViewNumber > atomic.LoadInt64(&r.curView) {
-		atomic.StoreInt64(&r.curView, vote.ViewNumber)
-	}
-
-	if r.GetLeader() != r.replicaId {
-		// 当前节点不是leader，等待下一轮的proposal消息
-		r.startNewViewTimer()
-	} else {
-		// TODO 多节点投票收集
-		// 当前节点是leader，处理proposal消息
-		r.stopNewViewTimer()
-	}
-}
-
 func (r *RoundRobinPM) OnReceiveNewView(id int64, block *pb.Block, newView *pb.NewView) {
-	logger.Info("view info", "genericView", newView.GetGenericQc().ViewNumber, "hqcView", r.hqc().ViewNumber,
+	logger.Info("view status info", "genericView", newView.GetGenericQc().ViewNumber, "hqcView", r.hqc().ViewNumber,
 		"viewNumber", newView.ViewNumber, "curView", r.curView)
 
 	if newView.ViewNumber < atomic.LoadInt64(&r.curView) {
@@ -140,12 +140,13 @@ func (r *RoundRobinPM) OnReceiveNewView(id int64, block *pb.Block, newView *pb.N
 	}
 
 	if newView.GetGenericQc().ViewNumber > r.hqc().ViewNumber {
+		// 当接收到的hqc比当前hqc高时，如果当前副本没有需要处理的proposal，则直接new-view，无需超时等待
+		// TODO block getting
 		if block != nil {
 			r.hqcUpdate(block, newView.GenericQc)
 		}
 		r.UpdateQcHigh(newView.ViewNumber, newView.GenericQc)
 		if len(r.submitC) > 0 {
-			r.stopNewViewTimer()
 			go r.OnBeat()
 		} else {
 			go r.OnNextSyncView()
@@ -153,19 +154,39 @@ func (r *RoundRobinPM) OnReceiveNewView(id int64, block *pb.Block, newView *pb.N
 		return
 	} else if newView.ViewNumber > atomic.LoadInt64(&r.curView) {
 		// 副本间同步view number
-		r.startNewViewTimer()
+		r.stopNewViewTimer()
 		atomic.StoreInt64(&r.curView, newView.ViewNumber)
 		viewMsg := &pb.Message{Type: &pb.Message_NewView{
 			NewView: &pb.NewView{ViewNumber: atomic.LoadInt64(&r.curView), GenericQc: r.hqc()}}}
-		_ = r.BroadcastMsg(viewMsg)
+		go r.BroadcastMsg(viewMsg)
+		r.startNewViewTimer()
 		return
 	}
 
+	highView := r.addNewViewMsg(id, newView)
+	if highView == nil {
+		return
+	}
+
+	if block != nil {
+		r.hqcUpdate(block, newView.GenericQc)
+	}
+	r.UpdateQcHigh(highView.ViewNumber, highView.GenericQc)
+
+	if len(r.submitC) > 0 {
+		r.stopNewViewTimer()
+		go r.OnBeat()
+	} else {
+		r.startNewViewTimer()
+	}
+}
+
+func (r *RoundRobinPM) addNewViewMsg(id int64, newView *pb.NewView) (highView *pb.NewView) {
 	r.mut.Lock()
-	var highView *pb.NewView
+	defer r.mut.Unlock()
+
 	if views, ok := r.views[newView.ViewNumber]; ok {
 		if len(views) >= utils.GetQuorumSize(r.metadata) {
-			r.mut.Unlock()
 			return
 		}
 		if view, ok := views[id]; ok {
@@ -189,35 +210,24 @@ func (r *RoundRobinPM) OnReceiveNewView(id int64, block *pb.Block, newView *pb.N
 		r.views[newView.ViewNumber][id] = newView
 	}
 
-	if highView == nil {
-		r.mut.Unlock()
-		return
-	}
+	return
+}
 
-	if block != nil {
-		r.hqcUpdate(block, newView.GenericQc)
-	}
-
-	r.UpdateQcHigh(highView.ViewNumber, highView.GenericQc)
-	r.mut.Unlock()
-
-	if len(r.submitC) > 0 {
-		r.stopNewViewTimer()
-		go r.OnBeat()
-	} else {
-		r.startNewViewTimer()
+func (r *RoundRobinPM) clearViews() {
+	for key, _ := range r.views {
+		if key < atomic.LoadInt64(&r.curView) {
+			delete(r.views, key)
+		}
 	}
 }
 
 func (r *RoundRobinPM) OnQcFinishEvent() {
-	if r.replicaId == r.GetLeader() {
+	if r.GetLeader(atomic.LoadInt64(&r.curView)) == r.replicaId {
 		atomic.AddInt64(&r.curView, 1)
+		logger.Debug("enter next view", "view", atomic.LoadInt64(&r.curView), "leader", r.GetLeader(atomic.LoadInt64(&r.curView)))
 		if len(r.submitC) > 0 {
-			r.stopNewViewTimer()
-			// view更新在hqc
 			go r.OnBeat()
 		} else {
-			logger.Debug("enter next view", "view", atomic.LoadInt64(&r.curView), "leader", r.GetLeader())
 			go r.OnNextSyncView()
 		}
 	} else {
