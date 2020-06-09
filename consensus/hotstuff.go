@@ -32,6 +32,8 @@ type HotStuffCore struct {
 
 	blockCache *sync.Map
 
+	voteSet map[int64][]*pb.Vote
+
 	// identity of the replica itself
 	id ReplicaID
 
@@ -53,6 +55,7 @@ func NewHotStuffCore(id ReplicaID, signer Signer, replicas *ReplicaConf) *HotStu
 		voteHeight:   0,
 		mut:          &sync.Mutex{},
 		blockCache:   &sync.Map{},
+		voteSet:      make(map[int64][]*pb.Vote),
 		id:           id,
 		signer:       signer,
 		replicas:     replicas,
@@ -156,12 +159,14 @@ func (hsc *HotStuffCore) OnReceiveProposal(prop *pb.Proposal) error {
 
 func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
 	logger.Debug("enter receive vote", "vote", vote)
-	hsc.mut.Lock()
-	block, err := hsc.getBlockByHash(vote.BlockHash)
-	if err != nil {
-		return err
+	block, _ := hsc.getBlockByHash(vote.BlockHash)
+	if block == nil {
+		// proposal广播消息在vote消息之后到达
+		hsc.addVoteMsg(vote)
+		return nil
 	}
 
+	hsc.mut.Lock()
 	if len(block.SelfQc.Signs) >= hsc.replicas.QuorumSize {
 		logger.Debug("receive vote number already satisfied quorum size")
 		hsc.mut.Unlock()
@@ -174,12 +179,13 @@ func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
 	}
 
 	block.SelfQc.Signs[vote.Voter] = vote.Cert
+	hsc.mut.Unlock()
+
+	hsc.applyVotes(vote.ViewNumber, block)
 
 	if len(block.SelfQc.Signs) < hsc.replicas.QuorumSize {
-		hsc.mut.Unlock()
 		return nil
 	}
-	hsc.mut.Unlock()
 
 	logger.Debug("receive vote number already satisfied quorum size")
 	hsc.UpdateHighestQC(block, block.SelfQc)
@@ -354,6 +360,37 @@ func (hsc *HotStuffCore) getBlockByHash(hash []byte) (*pb.Block, error) {
 		return nil, errors.Errorf("block not found with hash: %s", hex.EncodeToString(hash))
 	}
 	return block.(*pb.Block), nil
+}
+
+func (hsc *HotStuffCore) addVoteMsg(vote *pb.Vote) {
+	hsc.mut.Lock()
+	defer hsc.mut.Unlock()
+
+	voteSlice, ok := hsc.voteSet[vote.ViewNumber]
+	if ok {
+		hsc.voteSet[vote.ViewNumber] = append(voteSlice, vote)
+	} else {
+		hsc.voteSet[vote.ViewNumber] = []*pb.Vote{vote}
+	}
+}
+
+func (hsc *HotStuffCore) applyVotes(viewNumber int64, block *pb.Block) {
+	hsc.mut.Lock()
+	defer hsc.mut.Unlock()
+
+	votes, ok := hsc.voteSet[viewNumber]
+	if !ok {
+		return
+	}
+
+	for _, v := range votes {
+		if _, ok := block.SelfQc.Signs[v.Voter]; ok {
+			continue
+		}
+		block.SelfQc.Signs[v.Voter] = v.Cert
+	}
+
+	delete(hsc.voteSet, viewNumber)
 }
 
 func (hsc *HotStuffCore) notify(n EventNotifier) {
