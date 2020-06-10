@@ -105,10 +105,10 @@ func (r *RoundRobinPM) OnNextSyncView() {
 
 	if leader != r.replicaId {
 		// TODO 逻辑待推敲
-		//if !r.GetConnectStatus(leader) {
-		//	r.OnNextSyncView()
-		//	return
-		//}
+		if !r.GetConnectStatus(leader) {
+			r.OnNextSyncView()
+			return
+		}
 
 		r.startNewViewTimer()
 		viewMsg := &pb.Message{Type: &pb.Message_NewView{
@@ -131,10 +131,10 @@ func (r *RoundRobinPM) OnProposeEvent(proposal *pb.Proposal) {
 		// 当前节点不是leader，等待下一轮的proposal消息
 		r.startNewViewTimer()
 		// TODO 逻辑待推敲
-		//if !r.GetConnectStatus(r.GetLeader(atomic.LoadInt64(&r.curView))) {
-		//	atomic.AddInt64(&r.curView, 1)
-		//	proposal.ViewNumber = atomic.LoadInt64(&r.curView)
-		//}
+		if !r.GetConnectStatus(r.GetLeader(atomic.LoadInt64(&r.curView))) {
+			atomic.AddInt64(&r.curView, 1)
+			proposal.ViewNumber = atomic.LoadInt64(&r.curView)
+		}
 	} else {
 		// 当前节点是leader，QcFinish处理proposal消息
 		//r.stopNewViewTimer()
@@ -154,11 +154,11 @@ func (r *RoundRobinPM) OnReceiveProposal(proposal *pb.Proposal, vote *pb.Vote) {
 		// 当前节点不是leader，等待下一轮的proposal消息
 		//r.startNewViewTimer()
 		// TODO 逻辑待推敲
-		//if !r.GetConnectStatus(r.GetLeader(atomic.LoadInt64(&r.curView))) {
-		//	atomic.AddInt64(&r.curView, 1)
-		//	proposal.ViewNumber = atomic.LoadInt64(&r.curView)
-		//	r.OnReceiveProposal(proposal, vote)
-		//}
+		if !r.GetConnectStatus(r.GetLeader(atomic.LoadInt64(&r.curView))) {
+			atomic.AddInt64(&r.curView, 1)
+			proposal.ViewNumber = atomic.LoadInt64(&r.curView)
+			r.OnReceiveProposal(proposal, vote)
+		}
 	} else {
 		// 当前节点是leader，QcFinish处理proposal消息
 		r.stopNewViewTimer()
