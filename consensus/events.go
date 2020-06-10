@@ -1,19 +1,20 @@
 package consensus
 
-import "github.com/zhigui-projects/go-hotstuff/pb"
+import (
+	"github.com/zhigui-projects/go-hotstuff/pacemaker"
+	"github.com/zhigui-projects/go-hotstuff/pb"
+)
 
 type EventNotifier interface {
-	ExecuteEvent(base *HotStuffBase)
+	ExecuteEvent(pm pacemaker.PaceMaker)
 }
 
 type ProposeEvent struct {
 	Proposal *pb.Proposal
 }
 
-func (p *ProposeEvent) ExecuteEvent(base *HotStuffBase) {
-	base.OnProposeEvent(p.Proposal)
-	// 出块后，广播区块到其他副本
-	go base.BroadcastMsg(&pb.Message{Type: &pb.Message_Proposal{Proposal: p.Proposal}})
+func (p *ProposeEvent) ExecuteEvent(pm pacemaker.PaceMaker) {
+	pm.OnProposeEvent(p.Proposal)
 }
 
 type ReceiveProposalEvent struct {
@@ -21,11 +22,8 @@ type ReceiveProposalEvent struct {
 	Vote     *pb.Vote
 }
 
-func (r *ReceiveProposalEvent) ExecuteEvent(base *HotStuffBase) {
-	// 注意：必须先执行OnReceiveProposal，更新状态后doVote
-	base.PaceMaker.OnReceiveProposal(r.Proposal, r.Vote)
-	// 接收到Proposal投票后，判断当前节点是不是下一轮的leader，如果是leader，处理投票结果；如果不是leader，发送给下个leader
-	go base.DoVote(r.Vote, base.GetLeader(r.Proposal.ViewNumber))
+func (r *ReceiveProposalEvent) ExecuteEvent(pm pacemaker.PaceMaker) {
+	pm.OnReceiveProposal(r.Proposal, r.Vote)
 }
 
 type ReceiveNewViewEvent struct {
@@ -34,8 +32,8 @@ type ReceiveNewViewEvent struct {
 	View      *pb.NewView
 }
 
-func (r *ReceiveNewViewEvent) ExecuteEvent(base *HotStuffBase) {
-	base.OnReceiveNewView(r.ReplicaId, r.Block, r.View)
+func (r *ReceiveNewViewEvent) ExecuteEvent(pm pacemaker.PaceMaker) {
+	pm.OnReceiveNewView(r.ReplicaId, r.Block, r.View)
 }
 
 type QcFinishEvent struct {
@@ -43,23 +41,23 @@ type QcFinishEvent struct {
 	Qc       *pb.QuorumCert
 }
 
-func (q *QcFinishEvent) ExecuteEvent(base *HotStuffBase) {
-	base.OnQcFinishEvent()
+func (q *QcFinishEvent) ExecuteEvent(pm pacemaker.PaceMaker) {
+	pm.OnQcFinishEvent()
 }
 
 type HqcUpdateEvent struct {
 	Qc *pb.QuorumCert
 }
 
-func (h *HqcUpdateEvent) ExecuteEvent(base *HotStuffBase) {
-	base.UpdateQcHigh(h.Qc.ViewNumber, h.Qc)
+func (h *HqcUpdateEvent) ExecuteEvent(pm pacemaker.PaceMaker) {
+	pm.UpdateQcHigh(h.Qc.ViewNumber, h.Qc)
 }
 
 type DecideEvent struct {
 	Block *pb.Block
 }
 
-func (d *DecideEvent) ExecuteEvent(base *HotStuffBase) {
+func (d *DecideEvent) ExecuteEvent(pm pacemaker.PaceMaker) {
 	// TODO
 	logger.Info("consensus complete", "blockHeight", d.Block.Height, "cmds", string(d.Block.Cmds))
 }

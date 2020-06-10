@@ -8,6 +8,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/zhigui-projects/go-hotstuff/common/utils"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
 
@@ -167,8 +168,8 @@ func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
 	}
 
 	hsc.mut.Lock()
-	if len(block.SelfQc.Signs) >= hsc.replicas.QuorumSize {
-		logger.Debug("receive vote number already satisfied quorum size")
+	if len(block.SelfQc.Signs) >= utils.GetQuorumSize(hsc.replicas.Metadata) {
+		logger.Debug("receive vote number already satisfied quorum size", "view", vote.ViewNumber)
 		hsc.mut.Unlock()
 		return nil
 	}
@@ -183,11 +184,11 @@ func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
 
 	hsc.applyVotes(vote.ViewNumber, block)
 
-	if len(block.SelfQc.Signs) < hsc.replicas.QuorumSize {
+	if len(block.SelfQc.Signs) < utils.GetQuorumSize(hsc.replicas.Metadata) {
 		return nil
 	}
 
-	logger.Debug("receive vote number already satisfied quorum size")
+	logger.Debug("receive vote number already satisfied quorum size", "view", vote.ViewNumber)
 	hsc.UpdateHighestQC(block, block.SelfQc)
 	hsc.notify(&QcFinishEvent{Proposer: block.Proposer, Qc: block.SelfQc})
 

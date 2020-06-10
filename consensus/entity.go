@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/zhigui-projects/go-hotstuff/common/log"
+	"github.com/zhigui-projects/go-hotstuff/common/utils"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
 
@@ -24,18 +25,17 @@ type Signer interface {
 
 // ReplicaInfo holds information about a replica
 type ReplicaInfo struct {
-	ID       ReplicaID
 	Verifier Verifier
 }
 
 type ReplicaConf struct {
-	QuorumSize int
-	Replicas   map[ReplicaID]*ReplicaInfo
+	Metadata *pb.ConfigMetadata
+	Replicas map[ReplicaID]*ReplicaInfo
 }
 
 // VerifyQuorumCert will verify a QuorumCert from public keys stored in ReplicaConf
 func (rc *ReplicaConf) VerifyQuorumCert(qc *pb.QuorumCert) bool {
-	if qc == nil || len(qc.Signs) < rc.QuorumSize {
+	if qc == nil || len(qc.Signs) < utils.GetQuorumSize(rc.Metadata) {
 		return false
 	}
 	var wg sync.WaitGroup
@@ -57,7 +57,8 @@ func (rc *ReplicaConf) VerifyQuorumCert(qc *pb.QuorumCert) bool {
 		}(pc, info.Verifier)
 	}
 	wg.Wait()
-	return numVerified >= uint64(rc.QuorumSize)
+
+	return numVerified >= uint64(utils.GetQuorumSize(rc.Metadata))
 }
 
 // VerifyVote will verify a vote from public keys stored in ReplicaConf

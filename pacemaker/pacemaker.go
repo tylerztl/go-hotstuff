@@ -1,19 +1,30 @@
 package pacemaker
 
 import (
+	"context"
+
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/pb"
+	"github.com/zhigui-projects/go-hotstuff/transport"
 )
 
 var logger = log.GetLogger("module", "pacemaker")
 
-type GetHqcFunc func() *pb.QuorumCert
-type UpdateQCHighFunc func(block *pb.Block, qc *pb.QuorumCert)
-type ProposeFunc func(curView int64, parentHash, cmds []byte) error
+type HotStuff interface {
+	transport.BroadcastServer
+
+	Start(ctx context.Context)
+	ApplyPaceMaker(pm PaceMaker)
+	OnPropose(curView int64, parentHash, cmds []byte) error
+	DoVote(leader int64, vote *pb.Vote)
+	UpdateHighestQC(block *pb.Block, qc *pb.QuorumCert)
+	GetHighQC() *pb.QuorumCert
+	GetConnectStatus(id int64) bool
+}
 
 type PaceMaker interface {
 	// 启动pacemaker
-	Run()
+	Run(ctx context.Context)
 	// 提交待执行cmds到pacemaker
 	Submit(cmds []byte) error
 	// 触发执行cmds

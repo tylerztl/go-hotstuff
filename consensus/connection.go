@@ -9,9 +9,10 @@ import (
 )
 
 type NodeInfo struct {
-	Id      ReplicaID
-	Addr    string
-	TlsOpts *transport.TLSOptions
+	Id        ReplicaID
+	Addr      string
+	TlsOpts   *transport.TLSOptions
+	Connected bool
 }
 
 type NodeManager struct {
@@ -38,6 +39,7 @@ func NewNodeManager(id ReplicaID, replicas []*NodeInfo) *NodeManager {
 			pb.RegisterAtomicBroadcastServer(grpcServer.Server(), server)
 			mgr.BroadcastServer = server
 			mgr.GrpcServer = grpcServer
+			node.Connected = true
 			mgr.Self = node
 		}
 		mgr.Nodes[node.Id] = node
@@ -63,6 +65,7 @@ func (n *NodeManager) ConnectWorkers(queue chan<- MsgExecutor) {
 		go func(node *NodeInfo) {
 			delay := time.After(0)
 			for {
+				node.Connected = false
 				// reconnect attempts
 				<-delay
 				delay = time.After(transport.DefaultConnectionTimeout)
@@ -75,6 +78,7 @@ func (n *NodeManager) ConnectWorkers(queue chan<- MsgExecutor) {
 					continue
 				}
 				logger.Info("connection to replica node established", "id", node.Id, "address", node.Addr)
+				node.Connected = true
 
 				for {
 					msg, err := bc.Recv()
@@ -92,5 +96,14 @@ func (n *NodeManager) ConnectWorkers(queue chan<- MsgExecutor) {
 				}
 			}
 		}(node)
+	}
+}
+
+func (n *NodeManager) GetConnectStatus(id int64) bool {
+	node, ok := n.Nodes[ReplicaID(id)]
+	if ok {
+		return node.Connected
+	} else {
+		return false
 	}
 }

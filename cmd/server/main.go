@@ -141,12 +141,12 @@ var nodes = []*consensus.NodeInfo{
 }
 
 var replicas = &consensus.ReplicaConf{
-	QuorumSize: 3,
+	Metadata: &pb.ConfigMetadata{N: 4, F: 1, MsgWaitTimeout: 3},
 	Replicas: map[consensus.ReplicaID]*consensus.ReplicaInfo{
-		0: {ID: 0, Verifier: &crypto.ECDSAVerifier{Pub: &replica0PK.PublicKey}},
-		1: {ID: 1, Verifier: &crypto.ECDSAVerifier{Pub: &replica1PK.PublicKey}},
-		2: {ID: 2, Verifier: &crypto.ECDSAVerifier{Pub: &replica2PK.PublicKey}},
-		3: {ID: 3, Verifier: &crypto.ECDSAVerifier{Pub: &replica3PK.PublicKey}},
+		0: {Verifier: &crypto.ECDSAVerifier{Pub: &replica0PK.PublicKey}},
+		1: {Verifier: &crypto.ECDSAVerifier{Pub: &replica1PK.PublicKey}},
+		2: {Verifier: &crypto.ECDSAVerifier{Pub: &replica2PK.PublicKey}},
+		3: {Verifier: &crypto.ECDSAVerifier{Pub: &replica3PK.PublicKey}},
 	},
 }
 
@@ -165,10 +165,9 @@ func serve(args []string) error {
 		signer = &replica3PK
 	}
 
-	hsb := consensus.NewHotStuffBase(consensus.ReplicaID(replicaId), nodes, &crypto.ECDSASigner{Pri: signer}, replicas)
-	rr := pacemaker.NewRoundRobinPM(replicaId, &pb.ConfigMetadata{N: 4, F: 1, MsgWaitTimeout: 3}, hsb.GetHighQC, hsb.UpdateHighestQC, hsb.OnPropose, hsb.BroadcastServer)
-	hsb.ApplyPaceMaker(rr)
-	go hsb.Start(context.Background())
+	rr := pacemaker.NewRoundRobinPM(replicaId, replicas.Metadata,
+		consensus.NewHotStuffBase(consensus.ReplicaID(replicaId), nodes, &crypto.ECDSASigner{Pri: signer}, replicas))
+	go rr.Run(context.Background())
 
 	<-signals
 	return nil

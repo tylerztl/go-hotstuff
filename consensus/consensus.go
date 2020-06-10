@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/pacemaker"
 	"github.com/zhigui-projects/go-hotstuff/pb"
+	"google.golang.org/grpc/peer"
 )
 
 type HotStuffBase struct {
@@ -70,7 +71,7 @@ func (hsb *HotStuffBase) handleNewView(id ReplicaID, newView *pb.NewView) {
 	hsb.notify(&ReceiveNewViewEvent{int64(id), block, newView})
 }
 
-func (hsb *HotStuffBase) DoVote(vote *pb.Vote, leader int64) {
+func (hsb *HotStuffBase) DoVote(leader int64, vote *pb.Vote) {
 	if leader != hsb.GetID() {
 		if err := hsb.UnicastMsg(&pb.Message{Type: &pb.Message_Vote{Vote: vote}}, leader); err != nil {
 			logger.Error("do vote error when unicast msg", "to", leader)
@@ -89,14 +90,13 @@ func (hsb *HotStuffBase) Start(ctx context.Context) {
 
 	go hsb.StartServer()
 	go hsb.ConnectWorkers(hsb.queue)
-	go hsb.Run()
 
 	for {
 		select {
 		case m := <-hsb.queue:
 			go m.ExecuteMessage(hsb)
 		case n := <-hsb.GetNotifier():
-			go n.ExecuteEvent(hsb)
+			go n.ExecuteEvent(hsb.PaceMaker)
 		case <-ctx.Done():
 			return
 		}
@@ -104,7 +104,13 @@ func (hsb *HotStuffBase) Start(ctx context.Context) {
 }
 
 func (hsb *HotStuffBase) Submit(ctx context.Context, req *pb.SubmitRequest) (*pb.SubmitResponse, error) {
-	logger.Debug("receive new submit request", "cmds", string(req.Cmds))
+	var remoteAddress string
+	if p, _ := peer.FromContext(ctx); p != nil {
+		if address := p.Addr; address != nil {
+			remoteAddress = address.String()
+		}
+	}
+	logger.Debug("receive new submit request", "cmds", string(req.Cmds), "remoteAddress", remoteAddress)
 	if len(req.Cmds) == 0 {
 		return &pb.SubmitResponse{Status: pb.Status_BAD_REQUEST}, errors.New("request data is empty")
 	}
