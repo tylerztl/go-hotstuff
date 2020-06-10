@@ -41,6 +41,8 @@ type PaceMaker interface {
 	OnReceiveNewView(id int64, block *pb.Block, newView *pb.NewView)
 	// 收集到n-f个proposal vote事件
 	OnQcFinishEvent()
+	// 区块完成Decide阶段，达成共识，执行交易
+	DoDecide(block *pb.Block)
 	// highest qc 更新事件
 	UpdateQcHigh(viewNumber int64, qc *pb.QuorumCert)
 }

@@ -22,22 +22,25 @@ type RoundRobinPM struct {
 	submitC   chan []byte
 	doneC     chan struct{} // Closes when the consensus halts
 	waitTimer *time.Timer
+
+	decideExec func(cmds []byte)
 }
 
-func NewRoundRobinPM(replicaId int64, metadata *pb.ConfigMetadata, hs HotStuff) PaceMaker {
+func NewRoundRobinPM(hs HotStuff, replicaId int64, metadata *pb.ConfigMetadata, decideExec func(cmds []byte)) PaceMaker {
 	waitTimer := time.NewTimer(time.Duration(metadata.MsgWaitTimeout) * time.Second)
 	waitTimer.Stop()
 
 	return &RoundRobinPM{
-		HotStuff:  hs,
-		replicaId: replicaId,
-		metadata:  metadata,
-		curView:   0,
-		views:     make(map[int64]map[int64]*pb.NewView),
-		mut:       new(sync.Mutex),
-		submitC:   make(chan []byte, 100),
-		doneC:     make(chan struct{}),
-		waitTimer: waitTimer,
+		HotStuff:   hs,
+		replicaId:  replicaId,
+		metadata:   metadata,
+		curView:    0,
+		views:      make(map[int64]map[int64]*pb.NewView),
+		mut:        new(sync.Mutex),
+		submitC:    make(chan []byte, 100),
+		doneC:      make(chan struct{}),
+		waitTimer:  waitTimer,
+		decideExec: decideExec,
 	}
 }
 
@@ -45,10 +48,7 @@ func (r *RoundRobinPM) Run(ctx context.Context) {
 	r.ApplyPaceMaker(r)
 	go r.Start(ctx)
 
-	// bootstrap node
-	if r.replicaId == 0 {
-		go r.OnBeat()
-	}
+	go r.OnBeat()
 
 	for {
 		select {
@@ -70,6 +70,20 @@ func (r *RoundRobinPM) Submit(cmds []byte) error {
 func (r *RoundRobinPM) OnBeat() {
 	select {
 	case s := <-r.submitC:
+		// 节点启动后第一次处理交易，通过new-view唤醒其他副本节点
+		if !r.isLeader() {
+			go func() {
+				r.submitC <- s
+			}()
+			// OnReceiveNewView
+			atomic.AddInt64(&r.curView, 1)
+			viewMsg := &pb.Message{Type: &pb.Message_NewView{
+				NewView: &pb.NewView{ViewNumber: atomic.LoadInt64(&r.curView), GenericQc: r.GetHighQC()}}}
+			go r.BroadcastMsg(viewMsg)
+			r.startNewViewTimer()
+			return
+		}
+
 		if err := r.OnPropose(atomic.LoadInt64(&r.curView), r.GetHighQC().BlockHash, s); err != nil {
 			logger.Error("propose catch error", "error", err)
 		}
@@ -78,6 +92,10 @@ func (r *RoundRobinPM) OnBeat() {
 
 func (r *RoundRobinPM) GetLeader(view int64) int64 {
 	return (view + 1) % r.metadata.N
+}
+
+func (r *RoundRobinPM) isLeader() bool {
+	return atomic.LoadInt64(&r.curView)%r.metadata.N == r.replicaId
 }
 
 func (r *RoundRobinPM) OnNextSyncView() {
@@ -150,6 +168,7 @@ func (r *RoundRobinPM) OnReceiveProposal(proposal *pb.Proposal, vote *pb.Vote) {
 	go r.DoVote(r.GetLeader(proposal.ViewNumber), vote)
 }
 
+// TODO 并发量大时偶尔会存在超时现象，待分析
 func (r *RoundRobinPM) OnReceiveNewView(id int64, block *pb.Block, newView *pb.NewView) {
 	logger.Info("view status info", "genericView", newView.GetGenericQc().ViewNumber, "hqcView", r.GetHighQC().ViewNumber,
 		"viewNumber", newView.ViewNumber, "curView", r.curView)
@@ -261,6 +280,11 @@ func (r *RoundRobinPM) UpdateQcHigh(viewNumber int64, qc *pb.QuorumCert) {
 	if viewNumber > atomic.LoadInt64(&r.curView) {
 		atomic.StoreInt64(&r.curView, viewNumber)
 	}
+}
+
+func (r *RoundRobinPM) DoDecide(block *pb.Block) {
+	logger.Info("consensus complete", "blockHeight", block.Height, "cmds", string(block.Cmds))
+	r.decideExec(block.Cmds)
 }
 
 func (r *RoundRobinPM) startNewViewTimer() {

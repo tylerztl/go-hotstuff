@@ -165,8 +165,8 @@ func serve(args []string) error {
 		signer = &replica3PK
 	}
 
-	rr := pacemaker.NewRoundRobinPM(replicaId, replicas.Metadata,
-		consensus.NewHotStuffBase(consensus.ReplicaID(replicaId), nodes, &crypto.ECDSASigner{Pri: signer}, replicas))
+	rr := pacemaker.NewRoundRobinPM(consensus.NewHotStuffBase(consensus.ReplicaID(replicaId), nodes, &crypto.ECDSASigner{Pri: signer}, replicas),
+		replicaId, replicas.Metadata, func(cmds []byte) {})
 	go rr.Run(context.Background())
 
 	<-signals

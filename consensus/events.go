@@ -58,8 +58,7 @@ type DecideEvent struct {
 }
 
 func (d *DecideEvent) ExecuteEvent(pm pacemaker.PaceMaker) {
-	// TODO
-	logger.Info("consensus complete", "blockHeight", d.Block.Height, "cmds", string(d.Block.Cmds))
+	pm.DoDecide(d.Block)
 }
 
 type MsgExecutor interface {
