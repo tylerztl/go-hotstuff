@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zhigui-projects/go-hotstuff/common/crypto"
+	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/consensus"
 	"github.com/zhigui-projects/go-hotstuff/pacemaker"
 	"github.com/zhigui-projects/go-hotstuff/pb"
@@ -148,6 +149,7 @@ var replicas = &consensus.ReplicaConf{
 		2: {Verifier: &crypto.ECDSAVerifier{Pub: &replica2PK.PublicKey}},
 		3: {Verifier: &crypto.ECDSAVerifier{Pub: &replica3PK.PublicKey}},
 	},
+	Logger: log.GetLogger("module", "consensus"),
 }
 
 func serve(args []string) error {

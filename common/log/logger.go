@@ -6,9 +6,7 @@ import (
 	"github.com/inconshreveable/log15"
 )
 
-var (
-	defaultLogger = Logger(&DefaultLogger{New("logger", "hotstuff")})
-)
+var defaultLogger Logger
 
 type Logger interface {
 	// New returns a new Logger that has this logger's context plus the given context
@@ -38,6 +36,9 @@ func SetLogger(l Logger) {
 }
 
 func GetLogger(ctx ...interface{}) Logger {
+	if defaultLogger == nil {
+		defaultLogger = Logger(&DefaultLogger{New("logger", "hotstuff")})
+	}
 	if len(ctx) == 0 {
 		return defaultLogger
 	}

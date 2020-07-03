@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/common/utils"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
@@ -14,16 +15,16 @@ import (
 type RoundRobinPM struct {
 	HotStuff
 
-	replicaId int64
-	metadata  *pb.ConfigMetadata
-	curView   int64
-	views     map[int64]map[int64]*pb.NewView // ViewNumber ~ ReplicaID
-	mut       *sync.Mutex
-	submitC   chan []byte
-	doneC     chan struct{} // Closes when the consensus halts
-	waitTimer *time.Timer
-
+	replicaId  int64
+	metadata   *pb.ConfigMetadata
+	curView    int64
+	views      map[int64]map[int64]*pb.NewView // ViewNumber ~ ReplicaID
+	mut        *sync.Mutex
+	submitC    chan []byte
+	doneC      chan struct{} // Closes when the consensus halts
+	waitTimer  *time.Timer
 	decideExec func(cmds []byte)
+	logger     log.Logger
 }
 
 func NewRoundRobinPM(hs HotStuff, replicaId int64, metadata *pb.ConfigMetadata, decideExec func(cmds []byte)) PaceMaker {
@@ -41,6 +42,7 @@ func NewRoundRobinPM(hs HotStuff, replicaId int64, metadata *pb.ConfigMetadata, 
 		doneC:      make(chan struct{}),
 		waitTimer:  waitTimer,
 		decideExec: decideExec,
+		logger:     log.GetLogger("module", "pacemaker"),
 	}
 }
 
@@ -85,7 +87,7 @@ func (r *RoundRobinPM) OnBeat() {
 		}
 
 		if err := r.OnPropose(atomic.LoadInt64(&r.curView), r.GetHighQC().BlockHash, s); err != nil {
-			logger.Error("propose catch error", "error", err)
+			r.logger.Error("propose catch error", "error", err)
 		}
 	}
 }
@@ -101,7 +103,7 @@ func (r *RoundRobinPM) isLeader() bool {
 func (r *RoundRobinPM) OnNextSyncView() {
 	leader := r.GetLeader(atomic.LoadInt64(&r.curView))
 	atomic.AddInt64(&r.curView, 1)
-	logger.Debug("enter next view", "view", atomic.LoadInt64(&r.curView), "leader", leader)
+	r.logger.Debug("enter next view", "view", atomic.LoadInt64(&r.curView), "leader", leader)
 
 	if leader != r.replicaId {
 		// TODO 逻辑待推敲
@@ -170,7 +172,7 @@ func (r *RoundRobinPM) OnReceiveProposal(proposal *pb.Proposal, vote *pb.Vote) {
 
 // TODO 并发量大时偶尔会存在超时现象，待分析
 func (r *RoundRobinPM) OnReceiveNewView(id int64, block *pb.Block, newView *pb.NewView) {
-	logger.Debug("view status info", "genericView", newView.GetGenericQc().ViewNumber, "hqcView", r.GetHighQC().ViewNumber,
+	r.logger.Debug("view status info", "genericView", newView.GetGenericQc().ViewNumber, "hqcView", r.GetHighQC().ViewNumber,
 		"viewNumber", newView.ViewNumber, "curView", r.curView)
 
 	if newView.ViewNumber < atomic.LoadInt64(&r.curView) {
@@ -265,7 +267,7 @@ func (r *RoundRobinPM) clearViews() {
 func (r *RoundRobinPM) OnQcFinishEvent() {
 	if r.GetLeader(atomic.LoadInt64(&r.curView)) == r.replicaId {
 		atomic.AddInt64(&r.curView, 1)
-		logger.Debug("enter next view", "view", atomic.LoadInt64(&r.curView), "leader", r.GetLeader(atomic.LoadInt64(&r.curView)))
+		r.logger.Debug("enter next view", "view", atomic.LoadInt64(&r.curView), "leader", r.GetLeader(atomic.LoadInt64(&r.curView)))
 		if len(r.submitC) > 0 {
 			go r.OnBeat()
 		} else {
@@ -283,7 +285,7 @@ func (r *RoundRobinPM) UpdateQcHigh(viewNumber int64, qc *pb.QuorumCert) {
 }
 
 func (r *RoundRobinPM) DoDecide(block *pb.Block) {
-	logger.Debug("consensus complete", "blockHeight", block.Height, "cmds", string(block.Cmds))
+	r.logger.Debug("consensus complete", "blockHeight", block.Height, "cmds", string(block.Cmds))
 	r.decideExec(block.Cmds)
 }
 

@@ -12,8 +12,6 @@ import (
 	"google.golang.org/grpc/peer"
 )
 
-var logger = log.GetLogger("module", "transport")
-
 type BroadcastServer interface {
 	pb.AtomicBroadcastServer
 	BroadcastMsg(msg *pb.Message) error
@@ -23,23 +21,25 @@ type BroadcastServer interface {
 type abServer struct {
 	sendChan map[int64]chan<- *pb.Message
 	sendLock *sync.RWMutex
+	logger   log.Logger
 }
 
 func NewABServer() BroadcastServer {
 	return &abServer{
 		sendChan: make(map[int64]chan<- *pb.Message),
 		sendLock: new(sync.RWMutex),
+		logger:   log.GetLogger("module", "transport"),
 	}
 }
 
 func (a *abServer) Broadcast(srv pb.AtomicBroadcast_BroadcastServer) error {
 	addr, src := extractRemoteAddress(srv.Context())
-	logger.Debug("Starting new broadcast handler for remote peer", "addr", addr, "replicaId", src)
+	a.logger.Debug("Starting new broadcast handler for remote peer", "addr", addr, "replicaId", src)
 
 	ch := make(chan *pb.Message)
 	a.sendLock.Lock()
 	if oldChan, ok := a.sendChan[src]; ok {
-		logger.Debug("create new connection from replica node", "replicaId", src)
+		a.logger.Debug("create new connection from replica node", "replicaId", src)
 		close(oldChan)
 	}
 	a.sendChan[src] = ch
@@ -53,7 +53,7 @@ func (a *abServer) Broadcast(srv pb.AtomicBroadcast_BroadcastServer) error {
 			a.sendLock.Lock()
 			delete(a.sendChan, src)
 			a.sendLock.Unlock()
-			logger.Error("disconnected with replica node", "replicaId", src, "error", err)
+			a.logger.Error("disconnected with replica node", "replicaId", src, "error", err)
 		}
 	}
 
@@ -76,7 +76,7 @@ func (a *abServer) UnicastMsg(msg *pb.Message, dest int64) error {
 
 	ch, ok := a.sendChan[dest]
 	if !ok {
-		logger.Error("unicast msg to invalid replica node", "replicaId", dest)
+		a.logger.Error("unicast msg to invalid replica node", "replicaId", dest)
 		return errors.Errorf("unicast msg to invalid replica node: %d", dest)
 	}
 	ch <- msg

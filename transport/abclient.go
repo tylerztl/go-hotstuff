@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/pkg/errors"
+	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 	"google.golang.org/grpc/metadata"
 )
@@ -17,6 +18,7 @@ type BroadcastClient interface {
 
 type abClient struct {
 	client pb.AtomicBroadcast_BroadcastClient
+	logger log.Logger
 }
 
 // NewBroadcastClient creates a simple instance of the BroadcastClient interface
@@ -37,13 +39,13 @@ func NewBroadcastClient(address string, replicaId int64, opts *TLSOptions) (Broa
 		return nil, err
 	}
 
-	return &abClient{client: bc}, nil
+	return &abClient{client: bc, logger: log.GetLogger("module", "transport")}, nil
 }
 
 func (a *abClient) Recv() (*pb.Message, error) {
 	msg, err := a.client.Recv()
 	if err != nil {
-		logger.Error("broadcast client recv msg failed", "error", err)
+		a.logger.Error("broadcast client recv msg failed", "error", err)
 		return nil, err
 	}
 	return msg, nil
@@ -51,7 +53,7 @@ func (a *abClient) Recv() (*pb.Message, error) {
 
 func (a *abClient) Send(msg *pb.Message) error {
 	if err := a.client.Send(msg); err != nil {
-		logger.Error("broadcast client send msg failed", "error", err)
+		a.logger.Error("broadcast client send msg failed", "error", err)
 		return err
 	}
 	return nil

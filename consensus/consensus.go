@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 
 	"github.com/pkg/errors"
+	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/pacemaker"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 	"google.golang.org/grpc/peer"
@@ -14,19 +15,22 @@ type HotStuffBase struct {
 	pacemaker.PaceMaker
 	*HotStuffCore
 	*NodeManager
-	queue chan MsgExecutor
+	queue  chan MsgExecutor
+	logger log.Logger
 }
 
 func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer Signer, replicas *ReplicaConf) *HotStuffBase {
+	logger := log.GetLogger("module", "consensus")
 	if len(nodes) == 0 {
 		logger.Error("not found hotstuff replica node info")
 		return nil
 	}
 
 	hsb := &HotStuffBase{
-		HotStuffCore: NewHotStuffCore(id, signer, replicas),
-		NodeManager:  NewNodeManager(id, nodes),
+		HotStuffCore: NewHotStuffCore(id, signer, replicas, logger),
+		NodeManager:  NewNodeManager(id, nodes, logger),
 		queue:        make(chan MsgExecutor),
+		logger:       logger,
 	}
 	pb.RegisterHotstuffServer(hsb.Server(), hsb)
 	return hsb
@@ -38,14 +42,14 @@ func (hsb *HotStuffBase) ApplyPaceMaker(pm pacemaker.PaceMaker) {
 
 func (hsb *HotStuffBase) handleProposal(proposal *pb.Proposal) {
 	if proposal == nil || proposal.Block == nil {
-		logger.Warning("handle proposal with empty block")
+		hsb.logger.Warning("handle proposal with empty block")
 		return
 	}
-	logger.Info("handle proposal", "proposer", proposal.Block.Proposer,
+	hsb.logger.Info("handle proposal", "proposer", proposal.Block.Proposer,
 		"height", proposal.Block.Height, "hash", hex.EncodeToString(proposal.Block.SelfQc.BlockHash))
 
 	if err := hsb.HotStuffCore.OnReceiveProposal(proposal); err != nil {
-		logger.Warning("handle proposal catch error", "error", err)
+		hsb.logger.Warning("handle proposal catch error", "error", err)
 	}
 }
 
@@ -54,7 +58,7 @@ func (hsb *HotStuffBase) handleVote(vote *pb.Vote) {
 		return
 	}
 	if err := hsb.OnReceiveVote(vote); err != nil {
-		logger.Warning("handle vote catch error", "error", err)
+		hsb.logger.Warning("handle vote catch error", "error", err)
 		return
 	}
 }
@@ -62,7 +66,7 @@ func (hsb *HotStuffBase) handleVote(vote *pb.Vote) {
 func (hsb *HotStuffBase) handleNewView(id ReplicaID, newView *pb.NewView) {
 	block, err := hsb.getBlockByHash(newView.GenericQc.BlockHash)
 	if err != nil {
-		logger.Error("Could not find block of new QC", "error", err)
+		hsb.logger.Error("Could not find block of new QC", "error", err)
 		return
 	}
 
@@ -74,11 +78,11 @@ func (hsb *HotStuffBase) handleNewView(id ReplicaID, newView *pb.NewView) {
 func (hsb *HotStuffBase) DoVote(leader int64, vote *pb.Vote) {
 	if leader != hsb.GetID() {
 		if err := hsb.UnicastMsg(&pb.Message{Type: &pb.Message_Vote{Vote: vote}}, leader); err != nil {
-			logger.Error("do vote error when unicast msg", "to", leader)
+			hsb.logger.Error("do vote error when unicast msg", "to", leader)
 		}
 	} else {
 		if err := hsb.OnReceiveVote(vote); err != nil {
-			logger.Warning("do vote error when receive vote", "to", leader)
+			hsb.logger.Warning("do vote error when receive vote", "to", leader)
 		}
 	}
 }
@@ -110,7 +114,7 @@ func (hsb *HotStuffBase) Submit(ctx context.Context, req *pb.SubmitRequest) (*pb
 			remoteAddress = address.String()
 		}
 	}
-	logger.Info("receive new submit request", "remoteAddress", remoteAddress)
+	hsb.logger.Info("receive new submit request", "remoteAddress", remoteAddress)
 	if len(req.Cmds) == 0 {
 		return &pb.SubmitResponse{Status: pb.Status_BAD_REQUEST}, errors.New("request data is empty")
 	}
@@ -123,7 +127,7 @@ func (hsb *HotStuffBase) Submit(ctx context.Context, req *pb.SubmitRequest) (*pb
 }
 
 func (hsb *HotStuffBase) receiveMsg(msg *pb.Message, src ReplicaID) {
-	logger.Debug("received message", "from", src, "to", hsb.GetID(), "msg", msg.String())
+	hsb.logger.Debug("received message", "from", src, "to", hsb.GetID(), "msg", msg.String())
 
 	switch msg.GetType().(type) {
 	case *pb.Message_Proposal:

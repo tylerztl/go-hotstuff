@@ -3,12 +3,9 @@ package pacemaker
 import (
 	"context"
 
-	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 	"github.com/zhigui-projects/go-hotstuff/transport"
 )
-
-var logger = log.GetLogger("module", "pacemaker")
 
 type HotStuff interface {
 	transport.BroadcastServer

@@ -11,8 +11,6 @@ import (
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
 
-var logger = log.GetLogger("module", "consensus")
-
 type ReplicaID int64
 
 type Verifier interface {
@@ -31,6 +29,7 @@ type ReplicaInfo struct {
 type ReplicaConf struct {
 	Metadata *pb.ConfigMetadata
 	Replicas map[ReplicaID]*ReplicaInfo
+	Logger   log.Logger
 }
 
 // VerifyQuorumCert will verify a QuorumCert from public keys stored in ReplicaConf
@@ -43,7 +42,7 @@ func (rc *ReplicaConf) VerifyQuorumCert(qc *pb.QuorumCert) bool {
 	for id, pc := range qc.Signs {
 		info, ok := rc.Replicas[ReplicaID(id)]
 		if !ok {
-			logger.Warning("got replica info failed.", "replicaId", id)
+			rc.Logger.Warning("got replica info failed.", "replicaId", id)
 			continue
 		}
 		wg.Add(1)
@@ -51,7 +50,7 @@ func (rc *ReplicaConf) VerifyQuorumCert(qc *pb.QuorumCert) bool {
 			if ok, err := verifier.Verify(pc.Signature, qc.BlockHash); err == nil && ok {
 				atomic.AddUint64(&numVerified, 1)
 			} else {
-				logger.Warning("verify quorum cert signature failed.", "replicaId", id)
+				rc.Logger.Warning("verify quorum cert signature failed.", "replicaId", id)
 			}
 			wg.Done()
 		}(pc, info.Verifier)
@@ -68,12 +67,12 @@ func (rc *ReplicaConf) VerifyVote(vote *pb.Vote) bool {
 	}
 	info, ok := rc.Replicas[ReplicaID(vote.Voter)]
 	if !ok {
-		logger.Warning("got replica info failed.", "replicaId", vote.Voter)
+		rc.Logger.Warning("got replica info failed.", "replicaId", vote.Voter)
 		return false
 	}
 
 	if ok, err := info.Verifier.Verify(vote.Cert.Signature, vote.BlockHash); err != nil || !ok {
-		logger.Error("verify vote signature failed.", "replicaId", vote.Voter)
+		rc.Logger.Error("verify vote signature failed.", "replicaId", vote.Voter)
 		return false
 	}
 

@@ -4,6 +4,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 	"github.com/zhigui-projects/go-hotstuff/transport"
 )
@@ -20,12 +21,14 @@ type NodeManager struct {
 	*transport.GrpcServer
 	Self *NodeInfo
 	// all nodes info contains self
-	Nodes map[ReplicaID]*NodeInfo
+	Nodes  map[ReplicaID]*NodeInfo
+	Logger log.Logger
 }
 
-func NewNodeManager(id ReplicaID, replicas []*NodeInfo) *NodeManager {
+func NewNodeManager(id ReplicaID, replicas []*NodeInfo, logger log.Logger) *NodeManager {
 	mgr := &NodeManager{
-		Nodes: make(map[ReplicaID]*NodeInfo, len(replicas)),
+		Nodes:  make(map[ReplicaID]*NodeInfo, len(replicas)),
+		Logger: logger,
 	}
 	for _, node := range replicas {
 		if node.Id == id {
@@ -49,10 +52,10 @@ func NewNodeManager(id ReplicaID, replicas []*NodeInfo) *NodeManager {
 }
 
 func (n *NodeManager) StartServer() {
-	logger.Info("Hotstuff node started, beginning to serve requests", "replicaId", n.Self.Id, "serverAddress", n.Self.Addr)
+	n.Logger.Info("Hotstuff node started, beginning to serve requests", "replicaId", n.Self.Id, "serverAddress", n.Self.Addr)
 
 	if err := n.Start(); err != nil {
-		logger.Error(" Hotstuff node server start failed", "error", err)
+		n.Logger.Error(" Hotstuff node server start failed", "error", err)
 		panic(err)
 	}
 }
@@ -70,14 +73,14 @@ func (n *NodeManager) ConnectWorkers(queue chan<- MsgExecutor) {
 				<-delay
 				delay = time.After(transport.DefaultConnectionTimeout)
 
-				logger.Debug("connecting to replica node", "id", node.Id, "address", node.Addr)
+				n.Logger.Debug("connecting to replica node", "id", node.Id, "address", node.Addr)
 
 				bc, err := transport.NewBroadcastClient(node.Addr, int64(n.Self.Id), node.TlsOpts)
 				if err != nil {
-					logger.Warning("could not connect to replica node", "id", node.Id, "address", node.Addr, "error", err)
+					n.Logger.Warning("could not connect to replica node", "id", node.Id, "address", node.Addr, "error", err)
 					continue
 				}
-				logger.Info("connection to replica node established", "id", node.Id, "address", node.Addr)
+				n.Logger.Info("connection to replica node established", "id", node.Id, "address", node.Addr)
 				node.Connected = true
 
 				for {
@@ -86,7 +89,7 @@ func (n *NodeManager) ConnectWorkers(queue chan<- MsgExecutor) {
 						break
 					}
 					if err != nil {
-						logger.Warning("consensus stream with replica node broke", "id", node.Id, "address", node.Addr, "error", err)
+						n.Logger.Warning("consensus stream with replica node broke", "id", node.Id, "address", node.Addr, "error", err)
 						break
 					}
 
