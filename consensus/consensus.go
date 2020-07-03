@@ -38,14 +38,14 @@ func (hsb *HotStuffBase) ApplyPaceMaker(pm pacemaker.PaceMaker) {
 
 func (hsb *HotStuffBase) handleProposal(proposal *pb.Proposal) {
 	if proposal == nil || proposal.Block == nil {
-		logger.Warn("handle proposal with empty block")
+		logger.Warning("handle proposal with empty block")
 		return
 	}
 	logger.Info("handle proposal", "proposer", proposal.Block.Proposer,
 		"height", proposal.Block.Height, "hash", hex.EncodeToString(proposal.Block.SelfQc.BlockHash))
 
 	if err := hsb.HotStuffCore.OnReceiveProposal(proposal); err != nil {
-		logger.Warn("handle proposal catch error", "error", err)
+		logger.Warning("handle proposal catch error", "error", err)
 	}
 }
 
@@ -54,7 +54,7 @@ func (hsb *HotStuffBase) handleVote(vote *pb.Vote) {
 		return
 	}
 	if err := hsb.OnReceiveVote(vote); err != nil {
-		logger.Warn("handle vote catch error", "error", err)
+		logger.Warning("handle vote catch error", "error", err)
 		return
 	}
 }
@@ -78,7 +78,7 @@ func (hsb *HotStuffBase) DoVote(leader int64, vote *pb.Vote) {
 		}
 	} else {
 		if err := hsb.OnReceiveVote(vote); err != nil {
-			logger.Warn("do vote error when receive vote", "to", leader)
+			logger.Warning("do vote error when receive vote", "to", leader)
 		}
 	}
 }

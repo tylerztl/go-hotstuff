@@ -43,7 +43,7 @@ func (rc *ReplicaConf) VerifyQuorumCert(qc *pb.QuorumCert) bool {
 	for id, pc := range qc.Signs {
 		info, ok := rc.Replicas[ReplicaID(id)]
 		if !ok {
-			logger.Warn("got replica info failed.", "replicaId", id)
+			logger.Warning("got replica info failed.", "replicaId", id)
 			continue
 		}
 		wg.Add(1)
@@ -51,7 +51,7 @@ func (rc *ReplicaConf) VerifyQuorumCert(qc *pb.QuorumCert) bool {
 			if ok, err := verifier.Verify(pc.Signature, qc.BlockHash); err == nil && ok {
 				atomic.AddUint64(&numVerified, 1)
 			} else {
-				logger.Warn("verify quorum cert signature failed.", "replicaId", id)
+				logger.Warning("verify quorum cert signature failed.", "replicaId", id)
 			}
 			wg.Done()
 		}(pc, info.Verifier)
@@ -68,7 +68,7 @@ func (rc *ReplicaConf) VerifyVote(vote *pb.Vote) bool {
 	}
 	info, ok := rc.Replicas[ReplicaID(vote.Voter)]
 	if !ok {
-		logger.Warn("got replica info failed.", "replicaId", vote.Voter)
+		logger.Warning("got replica info failed.", "replicaId", vote.Voter)
 		return false
 	}
 

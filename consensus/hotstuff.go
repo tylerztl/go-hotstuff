@@ -236,7 +236,7 @@ func (hsc *HotStuffCore) update(block *pb.Block) error {
 	}
 
 	if !bytes.Equal(block2.ParentHash, block2.Justify.BlockHash) || !bytes.Equal(block1.ParentHash, block1.Justify.BlockHash) {
-		logger.Warn("decide phase failed, not build three-chain", "block2", block2.Height,
+		logger.Warning("decide phase failed, not build three-chain", "block2", block2.Height,
 			"block1", block1.Height, "block0", block0.Height)
 		return nil
 	}
@@ -343,13 +343,13 @@ func (hsc *HotStuffCore) getJustifyBlock(block *pb.Block) (*pb.Block, error) {
 		return nil, errors.New("empty block")
 	}
 	if block.Justify == nil {
-		logger.Warn("block's justify is null", "blockHeight", block.Height)
+		logger.Warning("block's justify is null", "blockHeight", block.Height)
 		return nil, errors.New("block's justify is null")
 	}
 
 	justifyBlock, ok := hsc.blockCache.Load(hex.EncodeToString(block.Justify.BlockHash))
 	if !ok {
-		logger.Warn("justify block not found from cache", "blockHeight", block.Height)
+		logger.Warning("justify block not found from cache", "blockHeight", block.Height)
 		return nil, errors.New("justify block not found")
 	}
 	return justifyBlock.(*pb.Block), nil
@@ -358,7 +358,7 @@ func (hsc *HotStuffCore) getJustifyBlock(block *pb.Block) (*pb.Block, error) {
 func (hsc *HotStuffCore) getBlockByHash(hash []byte) (*pb.Block, error) {
 	block, ok := hsc.blockCache.Load(hex.EncodeToString(hash))
 	if !ok {
-		logger.Warn("block not found from cache", "blockhash", hex.EncodeToString(hash))
+		logger.Warning("block not found from cache", "blockhash", hex.EncodeToString(hash))
 		return nil, errors.Errorf("block not found with hash: %s", hex.EncodeToString(hash))
 	}
 	return block.(*pb.Block), nil

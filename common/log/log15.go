@@ -12,36 +12,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Logger log15.Logger
-
-var logger Logger
-var errorFile string
-
-func init() {
-	filePath := path.Join(GetCurrentPath(), "logs")
-	errorFile = path.Join(filePath, "error.json")
-	if _, err := CreateDirIfMissing(filePath); err != nil {
-		panic(err)
-	}
-	logger = New("hotstuff", "logger")
-}
-
-func New(ctx ...interface{}) Logger {
+func New(ctx ...interface{}) log15.Logger {
 	log := log15.New(ctx...)
 	log.SetHandler(log15.SyncHandler(log15.MultiHandler(
-		//log15.StreamHandler(os.Stderr, log15.LogfmtFormat()),
-		log15.LvlFilterHandler(log15.LvlInfo, log15.StreamHandler(colorable.NewColorableStderr(), log15.TerminalFormat())),
-		log15.LvlFilterHandler(log15.LvlError, log15.Must.FileHandler(errorFile, log15.JsonFormat())),
+		log15.LvlFilterHandler(log15.LvlDebug, log15.StreamHandler(colorable.NewColorableStderr(), log15.TerminalFormat())),
 	)))
-
 	return log
-}
-
-func GetLogger(ctx ...interface{}) Logger {
-	if len(ctx) == 0 {
-		return logger
-	}
-	return New(ctx...)
 }
 
 func GetCurrentPath() string {
