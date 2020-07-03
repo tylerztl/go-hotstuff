@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/inconshreveable/log15"
+	"github.com/mattn/go-colorable"
 	"github.com/pkg/errors"
 )
 
@@ -28,9 +29,9 @@ func init() {
 func New(ctx ...interface{}) Logger {
 	log := log15.New(ctx...)
 	log.SetHandler(log15.SyncHandler(log15.MultiHandler(
-		log15.StreamHandler(os.Stderr, log15.LogfmtFormat()),
-		log15.LvlFilterHandler(log15.LvlError, log15.Must.FileHandler(
-			errorFile, log15.JsonFormat())),
+		//log15.StreamHandler(os.Stderr, log15.LogfmtFormat()),
+		log15.LvlFilterHandler(log15.LvlInfo, log15.StreamHandler(colorable.NewColorableStderr(), log15.TerminalFormat())),
+		log15.LvlFilterHandler(log15.LvlError, log15.Must.FileHandler(errorFile, log15.JsonFormat())),
 	)))
 
 	return log

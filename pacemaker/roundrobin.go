@@ -170,7 +170,7 @@ func (r *RoundRobinPM) OnReceiveProposal(proposal *pb.Proposal, vote *pb.Vote) {
 
 // TODO 并发量大时偶尔会存在超时现象，待分析
 func (r *RoundRobinPM) OnReceiveNewView(id int64, block *pb.Block, newView *pb.NewView) {
-	logger.Info("view status info", "genericView", newView.GetGenericQc().ViewNumber, "hqcView", r.GetHighQC().ViewNumber,
+	logger.Debug("view status info", "genericView", newView.GetGenericQc().ViewNumber, "hqcView", r.GetHighQC().ViewNumber,
 		"viewNumber", newView.ViewNumber, "curView", r.curView)
 
 	if newView.ViewNumber < atomic.LoadInt64(&r.curView) {
@@ -283,7 +283,7 @@ func (r *RoundRobinPM) UpdateQcHigh(viewNumber int64, qc *pb.QuorumCert) {
 }
 
 func (r *RoundRobinPM) DoDecide(block *pb.Block) {
-	logger.Info("consensus complete", "blockHeight", block.Height, "cmds", string(block.Cmds))
+	logger.Debug("consensus complete", "blockHeight", block.Height, "cmds", string(block.Cmds))
 	r.decideExec(block.Cmds)
 }
 

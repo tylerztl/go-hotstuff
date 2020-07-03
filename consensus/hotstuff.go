@@ -81,7 +81,7 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 	// add new block to storage
 	hash := GetBlockHash(newBlock)
 	hsc.blockCache.Store(hex.EncodeToString(hash), newBlock)
-	logger.Debug("create leaf node", "view", curView, "height", newBlock.Height, "cmds", string(cmds), "hash", hex.EncodeToString(hash))
+	logger.Info("create leaf node", "view", curView, "blockHeight", newBlock.Height, "hash", hex.EncodeToString(hash), "parentHash", hex.EncodeToString(parentHash))
 	// create quorum cert
 	newBlock.SelfQc = &pb.QuorumCert{ViewNumber: curView, BlockHash: hash, Signs: make(map[int64]*pb.PartCert)}
 	err := hsc.update(newBlock)
@@ -94,7 +94,7 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 		return errors.Errorf("new block should be higher than vote height, newHeight:%d, voteHeight:%d", newBlock.Height, hsc.voteHeight)
 	}
 	hsc.voteHeight = newBlock.Height
-	vote, err := hsc.voteProposal(curView, hash)
+	vote, err := hsc.voteProposal(curView, newBlock.Height, hash)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 		return err
 	}
 
-	logger.Debug("proposed new proposal", "view", curView, "height", newBlock.Height, "cmds", string(cmds), "parentHash", hex.EncodeToString(parentHash))
+	logger.Debug("proposed new proposal", "view", curView, "height", newBlock.Height, "cmds", string(cmds))
 	// broadcast proposal to other replicas
 	hsc.notify(&ProposeEvent{&pb.Proposal{ViewNumber: curView, Proposer: int64(hsc.id), Block: newBlock}})
 	return nil
@@ -147,7 +147,7 @@ func (hsc *HotStuffCore) OnReceiveProposal(prop *pb.Proposal) error {
 	}
 	hsc.mut.Unlock()
 
-	vote, err := hsc.voteProposal(prop.ViewNumber, block.SelfQc.BlockHash)
+	vote, err := hsc.voteProposal(prop.ViewNumber, block.Height, block.SelfQc.BlockHash)
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
 
 	hsc.mut.Lock()
 	if len(block.SelfQc.Signs) >= utils.GetQuorumSize(hsc.replicas.Metadata) {
-		logger.Debug("receive vote number already satisfied quorum size", "view", vote.ViewNumber)
+		logger.Info("receive vote number already satisfied quorum size", "view", vote.ViewNumber)
 		hsc.mut.Unlock()
 		return nil
 	}
@@ -188,15 +188,15 @@ func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
 		return nil
 	}
 
-	logger.Debug("receive vote number already satisfied quorum size", "view", vote.ViewNumber)
+	logger.Info("receive vote number already satisfied quorum size", "view", vote.ViewNumber)
 	hsc.UpdateHighestQC(block, block.SelfQc)
 	hsc.notify(&QcFinishEvent{Proposer: block.Proposer, Qc: block.SelfQc})
 
 	return nil
 }
 
-func (hsc *HotStuffCore) voteProposal(viewNumber int64, hash []byte) (*pb.Vote, error) {
-	logger.Debug("enter vote proposal", "hash", hex.EncodeToString(hash))
+func (hsc *HotStuffCore) voteProposal(viewNumber, height int64, hash []byte) (*pb.Vote, error) {
+	logger.Info("vote proposal", "voter", hsc.id, "view", viewNumber, "blockHeight", height, "hash", hex.EncodeToString(hash))
 	cert, err := hsc.createPartCert(hash)
 	if err != nil {
 		return nil, err
@@ -260,7 +260,7 @@ func (hsc *HotStuffCore) update(block *pb.Block) error {
 		if err != nil {
 			return err
 		}
-		logger.Debug("DECIDE phase, do consensus", "blockHeight", nblk.Height)
+		logger.Info("DECIDE phase, do consensus", "blockHeight", nblk.Height)
 		hsc.notify(&DecideEvent{nblk})
 		//hsc.blockCache.Delete(hex.EncodeToString(blockHash))
 		blockHash = nblk.ParentHash
@@ -273,7 +273,7 @@ func (hsc *HotStuffCore) update(block *pb.Block) error {
 }
 
 func (hsc *HotStuffCore) UpdateHighestQC(block *pb.Block, qc *pb.QuorumCert) {
-	logger.Debug("enter update highest qc", "blockHeight", block.Height)
+	logger.Debug("enter update highest qc", "blockHeight", block.Height, "qc", qc)
 	if !hsc.replicas.VerifyQuorumCert(qc) {
 		logger.Debug("QC not verified", "blockHeight", block.Height, "voteNumber", len(qc.Signs))
 		return
@@ -293,6 +293,7 @@ func (hsc *HotStuffCore) UpdateHighestQC(block *pb.Block, qc *pb.QuorumCert) {
 	}
 	logger.Debug("update highest QC", "newHeight", block.Height, "oldHeight", highBlock.Height)
 	if block.Height > highBlock.Height {
+		logger.Info("PRE-COMMIT phase, update highQC", "newHeight", block.Height, "oldHeight", highBlock.Height)
 		hsc.genericQC = qc
 		hsc.notify(&HqcUpdateEvent{qc})
 	}
@@ -303,7 +304,7 @@ func (hsc *HotStuffCore) updateLockedQC(block *pb.Block, qc *pb.QuorumCert) {
 	defer hsc.mut.Unlock()
 
 	if hsc.lockedQC == nil {
-		logger.Debug("COMMIT phase, update locked QC", "blockHeight", block.Height, "qc", qc)
+		logger.Info("COMMIT phase, update locked QC", "view", qc.ViewNumber, "blockHeight", block.Height, "hash", hex.EncodeToString(qc.BlockHash))
 		hsc.lockedQC = qc
 	}
 	lockedBlock, err := hsc.getBlockByHash(hsc.lockedQC.BlockHash)
@@ -313,7 +314,7 @@ func (hsc *HotStuffCore) updateLockedQC(block *pb.Block, qc *pb.QuorumCert) {
 	}
 
 	if block.Height > lockedBlock.Height {
-		logger.Debug("COMMIT phase, update locked QC", "blockHeight", block.Height, "qc", qc)
+		logger.Info("COMMIT phase, update locked QC", "view", qc.ViewNumber, "blockHeight", block.Height, "hash", hex.EncodeToString(qc.BlockHash))
 		hsc.lockedQC = qc
 	}
 }

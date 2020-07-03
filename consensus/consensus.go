@@ -41,7 +41,7 @@ func (hsb *HotStuffBase) handleProposal(proposal *pb.Proposal) {
 		logger.Warn("handle proposal with empty block")
 		return
 	}
-	logger.Debug("handle proposal", "proposer", proposal.Block.Proposer,
+	logger.Info("handle proposal", "proposer", proposal.Block.Proposer,
 		"height", proposal.Block.Height, "hash", hex.EncodeToString(proposal.Block.SelfQc.BlockHash))
 
 	if err := hsb.HotStuffCore.OnReceiveProposal(proposal); err != nil {
@@ -110,7 +110,7 @@ func (hsb *HotStuffBase) Submit(ctx context.Context, req *pb.SubmitRequest) (*pb
 			remoteAddress = address.String()
 		}
 	}
-	logger.Debug("receive new submit request", "cmds", string(req.Cmds), "remoteAddress", remoteAddress)
+	logger.Info("receive new submit request", "remoteAddress", remoteAddress)
 	if len(req.Cmds) == 0 {
 		return &pb.SubmitResponse{Status: pb.Status_BAD_REQUEST}, errors.New("request data is empty")
 	}
@@ -123,7 +123,7 @@ func (hsb *HotStuffBase) Submit(ctx context.Context, req *pb.SubmitRequest) (*pb
 }
 
 func (hsb *HotStuffBase) receiveMsg(msg *pb.Message, src ReplicaID) {
-	logger.Info("received message", "from", src, "to", hsb.GetID(), "msgType", msg.Type)
+	logger.Debug("received message", "from", src, "to", hsb.GetID(), "msg", msg.String())
 
 	switch msg.GetType().(type) {
 	case *pb.Message_Proposal:

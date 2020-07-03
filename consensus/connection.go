@@ -70,7 +70,7 @@ func (n *NodeManager) ConnectWorkers(queue chan<- MsgExecutor) {
 				<-delay
 				delay = time.After(transport.DefaultConnectionTimeout)
 
-				logger.Info("connecting to replica node", "id", node.Id, "address", node.Addr)
+				logger.Debug("connecting to replica node", "id", node.Id, "address", node.Addr)
 
 				bc, err := transport.NewBroadcastClient(node.Addr, int64(n.Self.Id), node.TlsOpts)
 				if err != nil {
