@@ -7,10 +7,13 @@ import (
 )
 
 var (
-	defaultLogger = Logger(&DefaultLogger{Logger: New("hotstuff", "logger")})
+	defaultLogger = Logger(&DefaultLogger{New("logger", "hotstuff")})
 )
 
 type Logger interface {
+	// New returns a new Logger that has this logger's context plus the given context
+	New(ctx ...interface{}) Logger
+
 	Debug(v ...interface{})
 	Debugf(format string, v ...interface{})
 
@@ -38,12 +41,16 @@ func GetLogger(ctx ...interface{}) Logger {
 	if len(ctx) == 0 {
 		return defaultLogger
 	}
-	return &DefaultLogger{Logger: New(ctx...)}
+	return defaultLogger.New(ctx...)
 }
 
 // DefaultLogger is a default implementation of the Logger interface.
 type DefaultLogger struct {
 	log15.Logger
+}
+
+func (l *DefaultLogger) New(ctx ...interface{}) Logger {
+	return &DefaultLogger{l.Logger.New(ctx...)}
 }
 
 func (l *DefaultLogger) Debug(v ...interface{}) {

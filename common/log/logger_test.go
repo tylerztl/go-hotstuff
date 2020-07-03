@@ -10,7 +10,7 @@ import (
 
 func TestSetLogger(t *testing.T) {
 	filePath := path.Join(GetCurrentPath(), "logs")
-	errorFile = path.Join(filePath, "error.json")
+	errorFile := path.Join(filePath, "error.json")
 	if _, err := CreateDirIfMissing(filePath); err != nil {
 		t.Fatal(err)
 	}
