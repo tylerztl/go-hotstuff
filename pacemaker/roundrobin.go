@@ -291,6 +291,7 @@ func (r *RoundRobinPM) DoDecide(block *pb.Block) {
 }
 
 func (r *RoundRobinPM) startNewViewTimer() {
+	r.stopNewViewTimer()
 	r.waitTimer.Reset(time.Duration(r.metadata.MsgWaitTimeout) * time.Second)
 }
 
