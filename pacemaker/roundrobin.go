@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"code.cloudfoundry.org/clock"
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/common/utils"
@@ -22,13 +23,13 @@ type RoundRobinPM struct {
 	mut        *sync.Mutex
 	submitC    chan []byte
 	doneC      chan struct{} // Closes when the consensus halts
-	waitTimer  *time.Timer
+	waitTimer  clock.Timer
 	decideExec func(cmds []byte)
 	logger     log.Logger
 }
 
 func NewRoundRobinPM(hs HotStuff, replicaId int64, metadata *pb.ConfigMetadata, decideExec func(cmds []byte)) PaceMaker {
-	waitTimer := time.NewTimer(time.Duration(metadata.MsgWaitTimeout) * time.Second)
+	waitTimer := clock.NewClock().NewTimer(time.Duration(metadata.MsgWaitTimeout) * time.Second)
 	waitTimer.Stop()
 
 	return &RoundRobinPM{
@@ -54,7 +55,7 @@ func (r *RoundRobinPM) Run(ctx context.Context) {
 
 	for {
 		select {
-		case <-r.waitTimer.C:
+		case <-r.waitTimer.C():
 			go r.OnNextSyncView()
 		}
 	}
