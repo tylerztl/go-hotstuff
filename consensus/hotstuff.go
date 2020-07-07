@@ -433,7 +433,7 @@ func (hsc *HotStuffCore) LoadBlock(hash []byte) (*pb.Block, error) {
 	blockHash := hex.EncodeToString(hash)
 	block, err := hsc.blockCache.Get(blockHash)
 	if err != nil {
-		hsc.logger.Error("load block data from db failed", "err", err, "hash", blockHash)
+		//hsc.logger.Error("load block data from db failed", "err", err, "hash", blockHash)
 		return nil, err
 	}
 	return block.(*pb.Block), nil

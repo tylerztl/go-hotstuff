@@ -258,6 +258,9 @@ func (r *RoundRobinPM) addNewViewMsg(id int64, newView *pb.NewView) (highView *p
 }
 
 func (r *RoundRobinPM) clearViews() {
+	r.mut.Lock()
+	defer r.mut.Unlock()
+
 	for key := range r.views {
 		if key < atomic.LoadInt64(&r.curView) {
 			delete(r.views, key)
