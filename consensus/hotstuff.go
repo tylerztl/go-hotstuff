@@ -8,6 +8,8 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/zhigui-projects/go-hotstuff/common/db"
+	"github.com/zhigui-projects/go-hotstuff/common/db/memorydb"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/common/utils"
 	"github.com/zhigui-projects/go-hotstuff/pb"
@@ -32,7 +34,7 @@ type HotStuffCore struct {
 
 	mut *sync.Mutex
 
-	blockCache *sync.Map
+	blockCache db.Database
 
 	voteSet map[int64][]*pb.Vote
 
@@ -58,7 +60,7 @@ func NewHotStuffCore(id ReplicaID, signer Signer, replicas *ReplicaConf, logger 
 		genesisBlock: genesis,
 		voteHeight:   0,
 		mut:          &sync.Mutex{},
-		blockCache:   &sync.Map{},
+		blockCache:   memorydb.NewLRUCache(10),
 		voteSet:      make(map[int64][]*pb.Vote),
 		id:           id,
 		signer:       signer,
@@ -70,25 +72,25 @@ func NewHotStuffCore(id ReplicaID, signer Signer, replicas *ReplicaConf, logger 
 	hsc.genericQC = genesis.SelfQc
 	hsc.lockedQC = genesis.SelfQc
 	hsc.execQC = genesis.SelfQc
-	hsc.blockCache.Store(hex.EncodeToString(hash), genesis)
+
+	hsc.StoreBlock(genesis)
 	return hsc
 }
 
 func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error {
-	v, ok := hsc.blockCache.Load(hex.EncodeToString(parentHash))
-	if !ok {
-		return errors.Errorf("parent block [%s] not found", hex.EncodeToString(parentHash))
+	block, err := hsc.LoadBlock(parentHash)
+	if err != nil {
+		return errors.Errorf("parent block not found, err: %v", err)
 	}
-	block := v.(*pb.Block)
 	// create the new block
 	newBlock := hsc.createLeaf(parentHash, cmds, block.Height+1)
 	// add new block to storage
 	hash := GetBlockHash(newBlock)
-	hsc.blockCache.Store(hex.EncodeToString(hash), newBlock)
 	hsc.logger.Info("create leaf node", "view", curView, "blockHeight", newBlock.Height, "hash", hex.EncodeToString(hash), "parentHash", hex.EncodeToString(parentHash))
 	// create quorum cert
 	newBlock.SelfQc = &pb.QuorumCert{ViewNumber: curView, BlockHash: hash, Signs: make(map[int64]*pb.PartCert)}
-	err := hsc.update(newBlock)
+	hsc.StoreBlock(newBlock)
+	err = hsc.update(newBlock)
 	if err != nil {
 		return err
 	}
@@ -114,7 +116,7 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 
 func (hsc *HotStuffCore) OnReceiveProposal(prop *pb.Proposal) error {
 	block := prop.Block
-	hsc.blockCache.Store(hex.EncodeToString(block.SelfQc.BlockHash), block)
+	hsc.StoreBlock(block)
 
 	if err := hsc.update(block); err != nil {
 		return err
@@ -127,7 +129,7 @@ func (hsc *HotStuffCore) OnReceiveProposal(prop *pb.Proposal) error {
 			hsc.mut.Unlock()
 			return err
 		}
-		lockedb, err := hsc.getBlockByHash(hsc.lockedQC.BlockHash)
+		lockedb, err := hsc.LoadBlock(hsc.lockedQC.BlockHash)
 		if err != nil {
 			hsc.mut.Unlock()
 			return err
@@ -139,7 +141,7 @@ func (hsc *HotStuffCore) OnReceiveProposal(prop *pb.Proposal) error {
 			// safety condition (extend the locked branch)
 			nblk := block
 			for i := block.Height - lockedb.Height; i > 0; i-- {
-				if nblk, err = hsc.getBlockByHash(nblk.ParentHash); err != nil {
+				if nblk, err = hsc.LoadBlock(nblk.ParentHash); err != nil {
 					hsc.mut.Unlock()
 					return err
 				}
@@ -164,7 +166,7 @@ func (hsc *HotStuffCore) OnReceiveProposal(prop *pb.Proposal) error {
 
 func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
 	hsc.logger.Debug("enter receive vote", "vote", vote)
-	block, _ := hsc.getBlockByHash(vote.BlockHash)
+	block, _ := hsc.LoadBlock(vote.BlockHash)
 	if block == nil {
 		// proposal广播消息在vote消息之后到达
 		hsc.addVoteMsg(vote)
@@ -248,7 +250,7 @@ func (hsc *HotStuffCore) update(block *pb.Block) error {
 	hsc.mut.Lock()
 	var execHeight int64
 	if hsc.execQC != nil {
-		execBlock, err := hsc.getBlockByHash(hsc.execQC.BlockHash)
+		execBlock, err := hsc.LoadBlock(hsc.execQC.BlockHash)
 		if err != nil {
 			hsc.mut.Unlock()
 			return err
@@ -260,17 +262,15 @@ func (hsc *HotStuffCore) update(block *pb.Block) error {
 
 	blockHash := GetBlockHash(block0)
 	for i := block0.Height - execHeight; i > 0; i-- {
-		nblk, err := hsc.getBlockByHash(blockHash)
+		nblk, err := hsc.LoadBlock(blockHash)
 		if err != nil {
 			return err
 		}
 		hsc.logger.Info("DECIDE phase, do consensus", "blockHeight", nblk.Height)
 		hsc.notify(&DecideEvent{nblk})
-		//hsc.blockCache.Delete(hex.EncodeToString(blockHash))
 		blockHash = nblk.ParentHash
 	}
 
-	// TODO delete decide block
 	// TODO: also commit the uncles/aunts
 
 	return nil
@@ -290,7 +290,7 @@ func (hsc *HotStuffCore) UpdateHighestQC(block *pb.Block, qc *pb.QuorumCert) {
 		hsc.genericQC = qc
 		return
 	}
-	highBlock, err := hsc.getBlockByHash(hsc.genericQC.BlockHash)
+	highBlock, err := hsc.LoadBlock(hsc.genericQC.BlockHash)
 	if err != nil {
 		hsc.logger.Error("updateHighestQC call getBlockByHash failed", "error", err)
 		return
@@ -311,7 +311,7 @@ func (hsc *HotStuffCore) updateLockedQC(block *pb.Block, qc *pb.QuorumCert) {
 		hsc.logger.Info("COMMIT phase, update locked QC", "view", qc.ViewNumber, "blockHeight", block.Height, "hash", hex.EncodeToString(qc.BlockHash))
 		hsc.lockedQC = qc
 	}
-	lockedBlock, err := hsc.getBlockByHash(hsc.lockedQC.BlockHash)
+	lockedBlock, err := hsc.LoadBlock(hsc.lockedQC.BlockHash)
 	if err != nil {
 		hsc.logger.Error("updateLockedQC call getBlockByHash failed", "error", err)
 		return
@@ -351,21 +351,12 @@ func (hsc *HotStuffCore) getJustifyBlock(block *pb.Block) (*pb.Block, error) {
 		return nil, errors.New("block's justify is null")
 	}
 
-	justifyBlock, ok := hsc.blockCache.Load(hex.EncodeToString(block.Justify.BlockHash))
-	if !ok {
-		hsc.logger.Warning("justify block not found from cache", "blockHeight", block.Height)
-		return nil, errors.New("justify block not found")
+	justifyBlock, err := hsc.LoadBlock(block.Justify.BlockHash)
+	if err != nil {
+		hsc.logger.Warning("justify block not found from db", "blockHeight", block.Height, "err", err)
+		return nil, err
 	}
-	return justifyBlock.(*pb.Block), nil
-}
-
-func (hsc *HotStuffCore) getBlockByHash(hash []byte) (*pb.Block, error) {
-	block, ok := hsc.blockCache.Load(hex.EncodeToString(hash))
-	if !ok {
-		hsc.logger.Warning("block not found from cache", "blockhash", hex.EncodeToString(hash))
-		return nil, errors.Errorf("block not found with hash: %s", hex.EncodeToString(hash))
-	}
-	return block.(*pb.Block), nil
+	return justifyBlock, nil
 }
 
 func (hsc *HotStuffCore) addVoteMsg(vote *pb.Vote) {
@@ -425,4 +416,22 @@ func (hsc *HotStuffCore) GetHighQC() *pb.QuorumCert {
 
 func (hsc *HotStuffCore) GetReplicas() *ReplicaConf {
 	return hsc.replicas
+}
+
+func (hsc *HotStuffCore) StoreBlock(block *pb.Block) {
+	blockHash := hex.EncodeToString(block.SelfQc.BlockHash)
+	if err := hsc.blockCache.Put(blockHash, block); err != nil {
+		hsc.logger.Error("store block data from db failed", "err", err, "hash", blockHash)
+	}
+	hsc.logger.Info("stored block to db", "hash", blockHash)
+}
+
+func (hsc *HotStuffCore) LoadBlock(hash []byte) (*pb.Block, error) {
+	blockHash := hex.EncodeToString(hash)
+	block, err := hsc.blockCache.Get(blockHash)
+	if err != nil {
+		hsc.logger.Error("load block data from db failed", "err", err, "hash", blockHash)
+		return nil, err
+	}
+	return block.(*pb.Block), nil
 }
