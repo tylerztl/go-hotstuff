@@ -185,6 +185,9 @@ func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
 		return errors.Errorf("duplicate vote for %s from %d", hex.EncodeToString(vote.BlockHash), vote.Voter)
 	}
 
+	if block.SelfQc.Signs == nil {
+		block.SelfQc.Signs = map[int64]*pb.PartCert{}
+	}
 	block.SelfQc.Signs[vote.Voter] = vote.Cert
 	hsc.mut.Unlock()
 
