@@ -2,9 +2,10 @@ package consensus
 
 import (
 	"context"
-	"encoding/hex"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/zhigui-projects/go-hotstuff/common/crypto"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/pacemaker"
 	"github.com/zhigui-projects/go-hotstuff/pb"
@@ -19,8 +20,8 @@ type HotStuffBase struct {
 	logger log.Logger
 }
 
-func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer Signer, replicas *ReplicaConf) *HotStuffBase {
-	logger := log.GetLogger("module", "consensus")
+func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer crypto.Signer, replicas *ReplicaConf) *HotStuffBase {
+	logger := log.GetLogger("module", "consensus", "node", id)
 	if len(nodes) == 0 {
 		logger.Error("not found hotstuff replica node info")
 		return nil
@@ -38,53 +39,6 @@ func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer Signer, replicas *R
 
 func (hsb *HotStuffBase) ApplyPaceMaker(pm pacemaker.PaceMaker) {
 	hsb.PaceMaker = pm
-}
-
-func (hsb *HotStuffBase) handleProposal(proposal *pb.Proposal) {
-	if proposal == nil || proposal.Block == nil {
-		hsb.logger.Warning("handle proposal with empty block")
-		return
-	}
-	hsb.logger.Info("handle proposal", "proposer", proposal.Block.Proposer,
-		"height", proposal.Block.Height, "hash", hex.EncodeToString(proposal.Block.SelfQc.BlockHash))
-
-	if err := hsb.HotStuffCore.OnReceiveProposal(proposal); err != nil {
-		hsb.logger.Warning("handle proposal catch error", "error", err)
-	}
-}
-
-func (hsb *HotStuffBase) handleVote(vote *pb.Vote) {
-	if ok := hsb.replicas.VerifyVote(vote); !ok {
-		return
-	}
-	if err := hsb.OnReceiveVote(vote); err != nil {
-		hsb.logger.Warning("handle vote catch error", "error", err)
-		return
-	}
-}
-
-func (hsb *HotStuffBase) handleNewView(id ReplicaID, newView *pb.NewView) {
-	block, err := hsb.LoadBlock(newView.GenericQc.BlockHash)
-	if err != nil {
-		hsb.logger.Error("Could not find block of new QC", "error", err)
-		return
-	}
-
-	//hsb.UpdateHighestQC(block, newView.GenericQc)
-
-	hsb.notify(&ReceiveNewViewEvent{int64(id), block, newView})
-}
-
-func (hsb *HotStuffBase) DoVote(leader int64, vote *pb.Vote) {
-	if leader != hsb.GetID() {
-		if err := hsb.UnicastMsg(&pb.Message{Type: &pb.Message_Vote{Vote: vote}}, leader); err != nil {
-			hsb.logger.Error("do vote error when unicast msg", "to", leader)
-		}
-	} else {
-		if err := hsb.OnReceiveVote(vote); err != nil {
-			hsb.logger.Warning("do vote error when receive vote", "to", leader)
-		}
-	}
 }
 
 func (hsb *HotStuffBase) Start(ctx context.Context) {
@@ -126,15 +80,86 @@ func (hsb *HotStuffBase) Submit(ctx context.Context, req *pb.SubmitRequest) (*pb
 	}
 }
 
-func (hsb *HotStuffBase) receiveMsg(msg *pb.Message, src ReplicaID) {
-	hsb.logger.Debug("received message", "from", src, "to", hsb.GetID(), "msg", msg.String())
+func (hsb *HotStuffBase) handleMessage(src ReplicaID, msg *pb.Message) {
+	hsb.logger.Debug("received message", "from", src, "msg", msg.String())
 
 	switch msg.GetType().(type) {
 	case *pb.Message_Proposal:
 		hsb.handleProposal(msg.GetProposal())
-	case *pb.Message_NewView:
-		hsb.handleNewView(src, msg.GetNewView())
+	case *pb.Message_ViewChange:
+		hsb.handleViewChange(src, msg.GetViewChange())
 	case *pb.Message_Vote:
-		hsb.handleVote(msg.GetVote())
+		hsb.handleVote(src, msg.GetVote())
+	case *pb.Message_Forward:
+		hsb.handleForward(src, msg.GetForward())
+	default:
+		hsb.logger.Error("received invalid message type", "from", src, "msg", msg.String())
 	}
+}
+
+// TODO 封装on接口
+func (hsb *HotStuffBase) handleProposal(proposal *pb.Proposal) {
+	if proposal.Block == nil {
+		hsb.logger.Error("receive invalid proposal msg with empty block")
+		return
+	}
+
+	if err := hsb.HotStuffCore.OnReceiveProposal(proposal); err != nil {
+		hsb.logger.Error("handle proposal msg catch error", "error", err)
+	}
+}
+
+func (hsb *HotStuffBase) handleViewChange(id ReplicaID, vc *pb.ViewChange) {
+	if ok := hsb.GetReplicas().VerifyIdentity(id, vc.Signature, vc.Data); !ok {
+		hsb.logger.Error("receive invalid view change msg signature verify failed")
+		return
+	}
+	newView := &pb.NewView{}
+	if err := proto.Unmarshal(vc.Data, newView); err != nil {
+		hsb.logger.Error("receive invalid view change msg that unmarshal NewView failed", "from", id, "error", err)
+		return
+	}
+	if newView.GenericQc == nil {
+		hsb.logger.Error("receive invalid view change msg that genericQc is null", "from", id)
+		return
+	}
+
+	if err := hsb.OnNewView(int64(id), newView); err != nil {
+		hsb.logger.Error("handle view change msg catch error", "from", id, "error", err)
+		return
+	}
+}
+
+func (hsb *HotStuffBase) handleVote(id ReplicaID, vote *pb.Vote) {
+	if len(vote.BlockHash) == 0 || vote.Cert == nil {
+		hsb.logger.Error("receive invalid vote msg data", "from", id)
+		return
+	}
+	if ok := hsb.GetReplicas().VerifyIdentity(id, vote.Cert.Signature, vote.BlockHash); !ok {
+		hsb.logger.Error("receive invalid vote msg signature verify failed")
+		return
+	}
+	if int64(id) != vote.Voter {
+		hsb.logger.Error("receive invalid vote msg replica id not match", "from", id, "voter", vote.Voter)
+		return
+	}
+	if leader := hsb.GetLeader(vote.ViewNumber); ReplicaID(leader) != hsb.id {
+		hsb.logger.Error("receive invalid vote msg not match leader id", "from", id,
+			"view", vote.ViewNumber, "leader", leader)
+		return
+	}
+
+	if err := hsb.OnProposalVote(vote); err != nil {
+		hsb.logger.Error("handle vote msg catch error", "from", id, "error", err)
+		return
+	}
+}
+
+func (hsb *HotStuffBase) handleForward(id ReplicaID, msg *pb.Forward) {
+	if len(msg.Data) == 0 {
+		hsb.logger.Error("receive invalid forward msg data", "from", id)
+		return
+	}
+
+	_ = hsb.PaceMaker.Submit(msg.Data)
 }

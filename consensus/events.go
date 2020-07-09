@@ -28,12 +28,11 @@ func (r *ReceiveProposalEvent) ExecuteEvent(pm pacemaker.PaceMaker) {
 
 type ReceiveNewViewEvent struct {
 	ReplicaId int64
-	Block     *pb.Block
 	View      *pb.NewView
 }
 
 func (r *ReceiveNewViewEvent) ExecuteEvent(pm pacemaker.PaceMaker) {
-	pm.OnReceiveNewView(r.ReplicaId, r.Block, r.View)
+	pm.OnReceiveNewView(r.ReplicaId, r.View)
 }
 
 type QcFinishEvent struct {
@@ -71,5 +70,5 @@ type msgEvent struct {
 }
 
 func (m *msgEvent) ExecuteMessage(base *HotStuffBase) {
-	base.receiveMsg(m.msg, m.src)
+	base.handleMessage(m.src, m.msg)
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/zhigui-projects/go-hotstuff/common/crypto"
 	"github.com/zhigui-projects/go-hotstuff/common/db"
 	"github.com/zhigui-projects/go-hotstuff/common/db/memorydb"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
@@ -32,16 +33,17 @@ type HotStuffCore struct {
 	// height of the block last voted for
 	voteHeight int64
 
-	mut *sync.Mutex
+	mut sync.Mutex
 
 	blockCache db.Database
 
-	voteSet map[int64][]*pb.Vote
+	// vote msg cache queue
+	voteSet map[string][]*pb.Vote
 
 	// identity of the replica itself
 	id ReplicaID
 
-	signer Signer
+	crypto.Signer
 
 	replicas *ReplicaConf
 
@@ -50,7 +52,7 @@ type HotStuffCore struct {
 	logger log.Logger
 }
 
-func NewHotStuffCore(id ReplicaID, signer Signer, replicas *ReplicaConf, logger log.Logger) *HotStuffCore {
+func NewHotStuffCore(id ReplicaID, signer crypto.Signer, replicas *ReplicaConf, logger log.Logger) *HotStuffCore {
 	// TODO: node restart, sync block
 	genesis := &pb.Block{
 		Height: 0,
@@ -59,11 +61,10 @@ func NewHotStuffCore(id ReplicaID, signer Signer, replicas *ReplicaConf, logger 
 	hsc := &HotStuffCore{
 		genesisBlock: genesis,
 		voteHeight:   0,
-		mut:          &sync.Mutex{},
-		blockCache:   memorydb.NewLRUCache(10),
-		voteSet:      make(map[int64][]*pb.Vote),
+		blockCache:   memorydb.NewLRUCache(30),
+		voteSet:      make(map[string][]*pb.Vote),
 		id:           id,
-		signer:       signer,
+		Signer:       signer,
 		replicas:     replicas,
 		notifyChan:   make(chan EventNotifier),
 		logger:       logger,
@@ -104,7 +105,7 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 	if err != nil {
 		return err
 	}
-	if err = hsc.OnReceiveVote(vote); err != nil {
+	if err = hsc.OnProposalVote(vote); err != nil {
 		return err
 	}
 
@@ -115,6 +116,9 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 }
 
 func (hsc *HotStuffCore) OnReceiveProposal(prop *pb.Proposal) error {
+	hsc.logger.Info("receive proposal msg", "proposer", prop.Block.Proposer,
+		"height", prop.Block.Height, "hash", hex.EncodeToString(prop.Block.SelfQc.BlockHash))
+
 	block := prop.Block
 	hsc.StoreBlock(block)
 
@@ -164,11 +168,10 @@ func (hsc *HotStuffCore) OnReceiveProposal(prop *pb.Proposal) error {
 	return nil
 }
 
-func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
-	hsc.logger.Debug("enter receive vote", "vote", vote)
+func (hsc *HotStuffCore) OnProposalVote(vote *pb.Vote) error {
 	block, _ := hsc.LoadBlock(vote.BlockHash)
 	if block == nil {
-		// proposal广播消息在vote消息之后到达
+		// Proposal Message可能在Vote Message之后到达
 		hsc.addVoteMsg(vote)
 		return nil
 	}
@@ -191,16 +194,21 @@ func (hsc *HotStuffCore) OnReceiveVote(vote *pb.Vote) error {
 	block.SelfQc.Signs[vote.Voter] = vote.Cert
 	hsc.mut.Unlock()
 
-	hsc.applyVotes(vote.ViewNumber, block)
+	hsc.applyVotes(block)
 
 	if len(block.SelfQc.Signs) < utils.GetQuorumSize(hsc.replicas.Metadata) {
 		return nil
 	}
 
-	hsc.logger.Info("receive vote number already satisfied quorum size", "view", vote.ViewNumber)
+	hsc.logger.Info("received vote msg number already satisfied quorum size", "blockHeight", block.Height, "blockHash", hex.EncodeToString(vote.BlockHash))
 	hsc.UpdateHighestQC(block, block.SelfQc)
 	hsc.notify(&QcFinishEvent{Proposer: block.Proposer, Qc: block.SelfQc})
 
+	return nil
+}
+
+func (hsc *HotStuffCore) OnNewView(signer int64, view *pb.NewView) error {
+	hsc.notify(&ReceiveNewViewEvent{signer, view})
 	return nil
 }
 
@@ -338,7 +346,7 @@ func (hsc *HotStuffCore) createLeaf(parentHash, cmds []byte, height int64) *pb.B
 }
 
 func (hsc *HotStuffCore) createPartCert(hash []byte) (*pb.PartCert, error) {
-	sig, err := hsc.signer.Sign(hash)
+	sig, err := hsc.Sign(hash)
 	if err != nil {
 		return nil, err
 	}
@@ -366,31 +374,28 @@ func (hsc *HotStuffCore) addVoteMsg(vote *pb.Vote) {
 	hsc.mut.Lock()
 	defer hsc.mut.Unlock()
 
-	voteSlice, ok := hsc.voteSet[vote.ViewNumber]
+	blockHash := hex.EncodeToString(vote.BlockHash)
+	voteSlice, ok := hsc.voteSet[blockHash]
 	if ok {
-		hsc.voteSet[vote.ViewNumber] = append(voteSlice, vote)
+		hsc.voteSet[blockHash] = append(voteSlice, vote)
 	} else {
-		hsc.voteSet[vote.ViewNumber] = []*pb.Vote{vote}
+		hsc.voteSet[blockHash] = []*pb.Vote{vote}
 	}
 }
 
-func (hsc *HotStuffCore) applyVotes(viewNumber int64, block *pb.Block) {
+func (hsc *HotStuffCore) applyVotes(block *pb.Block) {
+	blockHash := hex.EncodeToString(block.SelfQc.BlockHash)
 	hsc.mut.Lock()
 	defer hsc.mut.Unlock()
-
-	votes, ok := hsc.voteSet[viewNumber]
-	if !ok {
-		return
-	}
-
-	for _, v := range votes {
-		if _, ok := block.SelfQc.Signs[v.Voter]; ok {
-			continue
+	if votes, ok := hsc.voteSet[blockHash]; ok {
+		for _, v := range votes {
+			if _, ok := block.SelfQc.Signs[v.Voter]; ok {
+				continue
+			}
+			block.SelfQc.Signs[v.Voter] = v.Cert
 		}
-		block.SelfQc.Signs[v.Voter] = v.Cert
+		delete(hsc.voteSet, blockHash)
 	}
-
-	delete(hsc.voteSet, viewNumber)
 }
 
 func (hsc *HotStuffCore) notify(n EventNotifier) {

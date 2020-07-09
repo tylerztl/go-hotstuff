@@ -39,10 +39,16 @@ message Block {
 // Types of communication messages between replicas
 message Message {
     oneof type {
-        NewView new_view = 1;
+        ViewChange view_change = 1;
         Proposal proposal = 2;
         Vote vote = 3;
+        Forward forward = 4;
     };
+}
+
+message ViewChange {
+    bytes data = 1;
+    bytes signature = 2;
 }
 
 // new view msg
@@ -67,6 +73,11 @@ message Vote {
     bytes block_hash = 3;
     // Proof of validity for the vote
     PartCert cert = 4;
+}
+
+// forward cmds from external
+message Forward {
+    bytes data = 1;
 }
 
 message ConfigMetadata {

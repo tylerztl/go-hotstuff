@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/zhigui-projects/go-hotstuff/common/crypto"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/common/utils"
 	"github.com/zhigui-projects/go-hotstuff/pb"
@@ -13,17 +14,9 @@ import (
 
 type ReplicaID int64
 
-type Verifier interface {
-	Verify(signature, digest []byte) (bool, error)
-}
-
-type Signer interface {
-	Sign(digest []byte) ([]byte, error)
-}
-
 // ReplicaInfo holds information about a replica
 type ReplicaInfo struct {
-	Verifier Verifier
+	Verifier crypto.Verifier
 }
 
 type ReplicaConf struct {
@@ -46,7 +39,7 @@ func (rc *ReplicaConf) VerifyQuorumCert(qc *pb.QuorumCert) bool {
 			continue
 		}
 		wg.Add(1)
-		go func(pc *pb.PartCert, verifier Verifier) {
+		go func(pc *pb.PartCert, verifier crypto.Verifier) {
 			if ok, err := verifier.Verify(pc.Signature, qc.BlockHash); err == nil && ok {
 				atomic.AddUint64(&numVerified, 1)
 			} else {
@@ -61,21 +54,16 @@ func (rc *ReplicaConf) VerifyQuorumCert(qc *pb.QuorumCert) bool {
 }
 
 // VerifyVote will verify a vote from public keys stored in ReplicaConf
-func (rc *ReplicaConf) VerifyVote(vote *pb.Vote) bool {
-	if vote == nil || vote.Cert == nil {
-		return false
-	}
-	info, ok := rc.Replicas[ReplicaID(vote.Voter)]
+func (rc *ReplicaConf) VerifyIdentity(replicaId ReplicaID, signature, digest []byte) bool {
+	info, ok := rc.Replicas[replicaId]
 	if !ok {
-		rc.Logger.Warning("got replica info failed.", "replicaId", vote.Voter)
+		rc.Logger.Error("got replica info failed.", "replicaId", replicaId)
 		return false
 	}
-
-	if ok, err := info.Verifier.Verify(vote.Cert.Signature, vote.BlockHash); err != nil || !ok {
-		rc.Logger.Error("verify vote signature failed.", "replicaId", vote.Voter)
+	if ok, err := info.Verifier.Verify(signature, digest); err != nil || !ok {
+		rc.Logger.Error("verify vote signature failed.", "replicaId", replicaId)
 		return false
 	}
-
 	return true
 }
 

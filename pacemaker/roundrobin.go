@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"code.cloudfoundry.org/clock"
+	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/common/utils"
@@ -73,22 +74,15 @@ func (r *RoundRobinPM) Submit(cmds []byte) error {
 func (r *RoundRobinPM) OnBeat() {
 	select {
 	case s := <-r.submitC:
-		// 节点启动后第一次处理交易，通过new-view唤醒其他副本节点
-		if !r.isLeader() {
-			go func() {
-				r.submitC <- s
-			}()
-			// OnReceiveNewView
-			atomic.AddInt64(&r.curView, 1)
-			viewMsg := &pb.Message{Type: &pb.Message_NewView{
-				NewView: &pb.NewView{ViewNumber: atomic.LoadInt64(&r.curView), GenericQc: r.GetHighQC()}}}
-			go r.BroadcastMsg(viewMsg)
+		// 节点启动后第一次处理交易，如果不是leader, proposal转发给当前leader
+		leader := r.GetCurLeader(atomic.LoadInt64(&r.curView))
+		if leader != r.replicaId {
+			go r.UnicastMsg(&pb.Message{Type: &pb.Message_Forward{Forward: &pb.Forward{Data: s}}}, leader)
 			r.startNewViewTimer()
-			return
-		}
-
-		if err := r.OnPropose(atomic.LoadInt64(&r.curView), r.GetHighQC().BlockHash, s); err != nil {
-			r.logger.Error("propose catch error", "error", err)
+		} else {
+			if err := r.OnPropose(atomic.LoadInt64(&r.curView), r.GetHighQC().BlockHash, s); err != nil {
+				r.logger.Error("propose catch error", "error", err)
+			}
 		}
 	}
 }
@@ -97,8 +91,8 @@ func (r *RoundRobinPM) GetLeader(view int64) int64 {
 	return (view + 1) % r.metadata.N
 }
 
-func (r *RoundRobinPM) isLeader() bool {
-	return atomic.LoadInt64(&r.curView)%r.metadata.N == r.replicaId
+func (r *RoundRobinPM) GetCurLeader(viewNumber int64) int64 {
+	return viewNumber % r.metadata.N
 }
 
 func (r *RoundRobinPM) OnNextSyncView() {
@@ -114,14 +108,17 @@ func (r *RoundRobinPM) OnNextSyncView() {
 		}
 
 		r.startNewViewTimer()
-		viewMsg := &pb.Message{Type: &pb.Message_NewView{
-			NewView: &pb.NewView{ViewNumber: atomic.LoadInt64(&r.curView), GenericQc: r.GetHighQC()}}}
+		viewMsg, err := r.createSignedViewChange()
+		if err != nil {
+			r.logger.Error("create signed view change msg failed when unicast next new view msg", "error", err)
+			return
+		}
 		_ = r.UnicastMsg(viewMsg, leader)
 	} else {
 		if len(r.submitC) > 0 {
 			// 当leader == r.GetID()时，由 ReceiveNewView 事件来触发 propose, 因为可能需要updateHighestQC
 			viewMsg := &pb.NewView{ViewNumber: atomic.LoadInt64(&r.curView), GenericQc: r.GetHighQC()}
-			r.OnReceiveNewView(r.replicaId, nil, viewMsg)
+			r.OnReceiveNewView(r.replicaId, viewMsg)
 		} else {
 			r.startNewViewTimer()
 		}
@@ -168,15 +165,31 @@ func (r *RoundRobinPM) OnReceiveProposal(proposal *pb.Proposal, vote *pb.Vote) {
 	}
 
 	// 接收到Proposal投票后，判断当前节点是不是下一轮的leader，如果是leader，处理投票结果；如果不是leader，发送给下个leader
-	go r.DoVote(r.GetLeader(proposal.ViewNumber), vote)
+	leader := r.GetLeader(proposal.ViewNumber)
+	if leader != r.replicaId {
+		if err := r.UnicastMsg(&pb.Message{Type: &pb.Message_Vote{Vote: vote}}, leader); err != nil {
+			r.logger.Error("unicast proposal vote msg error failed", "to", leader, "err", err)
+		}
+	} else {
+		if err := r.OnProposalVote(vote); err != nil {
+			r.logger.Error("proposal vote msg failed", "to", leader, "err", err)
+		}
+	}
 }
 
 // TODO 并发量大时偶尔会存在超时现象，待分析
-func (r *RoundRobinPM) OnReceiveNewView(id int64, block *pb.Block, newView *pb.NewView) {
-	r.logger.Debug("view status info", "genericView", newView.GetGenericQc().ViewNumber, "hqcView", r.GetHighQC().ViewNumber,
-		"viewNumber", newView.ViewNumber, "curView", r.curView)
-
+func (r *RoundRobinPM) OnReceiveNewView(id int64, newView *pb.NewView) {
 	if newView.ViewNumber < atomic.LoadInt64(&r.curView) {
+		return
+	}
+
+	r.logger.Debug("receive new view msg", "genericView", newView.GetGenericQc().ViewNumber,
+		"hqcView", r.GetHighQC().ViewNumber, "viewNumber", newView.ViewNumber, "curView", r.curView)
+	
+	// TODO Proposal Message可能在NewView Message之后到达
+	block, err := r.LoadBlock(newView.GetGenericQc().BlockHash)
+	if err != nil {
+		r.logger.Error("receive new view load generic block failed", "error", err)
 		return
 	}
 
@@ -197,8 +210,11 @@ func (r *RoundRobinPM) OnReceiveNewView(id int64, block *pb.Block, newView *pb.N
 		// 副本间同步view number
 		r.stopNewViewTimer()
 		atomic.StoreInt64(&r.curView, newView.ViewNumber)
-		viewMsg := &pb.Message{Type: &pb.Message_NewView{
-			NewView: &pb.NewView{ViewNumber: atomic.LoadInt64(&r.curView), GenericQc: r.GetHighQC()}}}
+		viewMsg, err := r.createSignedViewChange()
+		if err != nil {
+			r.logger.Error("create signed view change msg failed when sync new view number", "error", err)
+			return
+		}
 		go r.BroadcastMsg(viewMsg)
 		r.startNewViewTimer()
 		return
@@ -220,6 +236,20 @@ func (r *RoundRobinPM) OnReceiveNewView(id int64, block *pb.Block, newView *pb.N
 	} else {
 		r.startNewViewTimer()
 	}
+}
+
+func (r *RoundRobinPM) createSignedViewChange() (*pb.Message, error) {
+	view := &pb.NewView{ViewNumber: atomic.LoadInt64(&r.curView), GenericQc: r.GetHighQC()}
+	data, err := proto.Marshal(view)
+	if err != nil {
+		return nil, err
+	}
+	sig, err := r.Sign(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.Message{Type: &pb.Message_ViewChange{ViewChange: &pb.ViewChange{Data: data, Signature: sig}}}, nil
 }
 
 func (r *RoundRobinPM) addNewViewMsg(id int64, newView *pb.NewView) (highView *pb.NewView) {

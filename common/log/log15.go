@@ -13,8 +13,15 @@ import (
 )
 
 func New(ctx ...interface{}) log15.Logger {
+	filePath := path.Join(GetCurrentPath(), "logs")
+	errorFile := path.Join(filePath, "error.json")
+	if _, err := CreateDirIfMissing(filePath); err != nil {
+		panic(err)
+	}
+
 	log := log15.New(ctx...)
 	log.SetHandler(log15.SyncHandler(log15.MultiHandler(
+		log15.LvlFilterHandler(log15.LvlError, log15.Must.FileHandler(errorFile, log15.JsonFormat())),
 		log15.LvlFilterHandler(log15.LvlDebug, log15.StreamHandler(colorable.NewColorableStderr(), log15.TerminalFormat())),
 	)))
 	return log

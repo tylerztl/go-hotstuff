@@ -3,19 +3,22 @@ package pacemaker
 import (
 	"context"
 
+	"github.com/zhigui-projects/go-hotstuff/common/crypto"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 	"github.com/zhigui-projects/go-hotstuff/transport"
 )
 
 type HotStuff interface {
 	transport.BroadcastServer
+	crypto.Signer
 
 	Start(ctx context.Context)
 	ApplyPaceMaker(pm PaceMaker)
 	OnPropose(curView int64, parentHash, cmds []byte) error
-	DoVote(leader int64, vote *pb.Vote)
+	OnProposalVote(vote *pb.Vote) error
 	UpdateHighestQC(block *pb.Block, qc *pb.QuorumCert)
 	GetHighQC() *pb.QuorumCert
+	LoadBlock(hash []byte) (*pb.Block, error)
 	GetConnectStatus(id int64) bool
 }
 
@@ -35,7 +38,7 @@ type PaceMaker interface {
 	// 监听到接收到其他节点发来的proposal消息的事件
 	OnReceiveProposal(proposal *pb.Proposal, vote *pb.Vote)
 	// 监听到接收到其他节点发来的new view消息的事件
-	OnReceiveNewView(id int64, block *pb.Block, newView *pb.NewView)
+	OnReceiveNewView(id int64, newView *pb.NewView)
 	// 收集到n-f个proposal vote事件
 	OnQcFinishEvent()
 	// 区块完成Decide阶段，达成共识，执行交易
