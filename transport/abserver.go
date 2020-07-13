@@ -6,25 +6,20 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/zhigui-projects/go-hotstuff/api"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 )
 
-type BroadcastServer interface {
-	pb.AtomicBroadcastServer
-	BroadcastMsg(msg *pb.Message) error
-	UnicastMsg(msg *pb.Message, dest int64) error
-}
-
 type abServer struct {
 	sendChan map[int64]chan<- *pb.Message
 	sendLock *sync.RWMutex
-	logger   log.Logger
+	logger   api.Logger
 }
 
-func NewABServer() BroadcastServer {
+func NewABServer() api.BroadcastServer {
 	return &abServer{
 		sendChan: make(map[int64]chan<- *pb.Message),
 		sendLock: new(sync.RWMutex),

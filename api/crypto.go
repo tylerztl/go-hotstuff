@@ -1,4 +1,4 @@
-package crypto
+package api
 
 type Verifier interface {
 	Verify(signature, digest []byte) (bool, error)

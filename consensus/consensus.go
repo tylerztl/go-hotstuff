@@ -5,22 +5,21 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
-	"github.com/zhigui-projects/go-hotstuff/common/crypto"
+	"github.com/zhigui-projects/go-hotstuff/api"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
-	"github.com/zhigui-projects/go-hotstuff/pacemaker"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 	"google.golang.org/grpc/peer"
 )
 
 type HotStuffBase struct {
-	pacemaker.PaceMaker
+	api.PaceMaker
 	*HotStuffCore
 	*NodeManager
 	queue  chan MsgExecutor
-	logger log.Logger
+	logger api.Logger
 }
 
-func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer crypto.Signer, replicas *ReplicaConf) *HotStuffBase {
+func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer api.Signer, replicas *ReplicaConf) *HotStuffBase {
 	logger := log.GetLogger("module", "consensus", "node", id)
 	if len(nodes) == 0 {
 		logger.Error("not found hotstuff replica node info")
@@ -37,7 +36,7 @@ func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer crypto.Signer, repl
 	return hsb
 }
 
-func (hsb *HotStuffBase) ApplyPaceMaker(pm pacemaker.PaceMaker) {
+func (hsb *HotStuffBase) ApplyPaceMaker(pm api.PaceMaker) {
 	hsb.PaceMaker = pm
 }
 

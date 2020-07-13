@@ -1,4 +1,4 @@
-package db
+package api
 
 type Database interface {
 	Get(key interface{}) (interface{}, error)

@@ -8,10 +8,8 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
-	"github.com/zhigui-projects/go-hotstuff/common/crypto"
-	"github.com/zhigui-projects/go-hotstuff/common/db"
+	"github.com/zhigui-projects/go-hotstuff/api"
 	"github.com/zhigui-projects/go-hotstuff/common/db/memorydb"
-	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/common/utils"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
@@ -40,7 +38,7 @@ type HotStuffCore struct {
 
 	mut sync.Mutex
 
-	blockCache db.Database
+	blockCache api.Database
 
 	// vote msg cache queue
 	voteSet map[string][]*pb.Vote
@@ -48,16 +46,16 @@ type HotStuffCore struct {
 	// identity of the replica itself
 	id ReplicaID
 
-	crypto.Signer
+	api.Signer
 
 	replicas *ReplicaConf
 
 	notifyChan chan EventNotifier
 
-	logger log.Logger
+	logger api.Logger
 }
 
-func NewHotStuffCore(id ReplicaID, signer crypto.Signer, replicas *ReplicaConf, logger log.Logger) *HotStuffCore {
+func NewHotStuffCore(id ReplicaID, signer api.Signer, replicas *ReplicaConf, logger api.Logger) *HotStuffCore {
 	// TODO: node restart, sync block
 	genesis := &pb.Block{
 		Height: 0,

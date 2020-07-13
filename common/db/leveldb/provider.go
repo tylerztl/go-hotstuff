@@ -6,7 +6,7 @@ import (
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
-	"github.com/zhigui-projects/go-hotstuff/common/db"
+	"github.com/zhigui-projects/go-hotstuff/api"
 )
 
 var dbNameKeySep = []byte{0x00}
@@ -27,7 +27,7 @@ func NewProvider() *Provider {
 }
 
 // GetDBHandle returns a handle to a named db
-func (p *Provider) GetDBHandle(dbName string) db.Database {
+func (p *Provider) GetDBHandle(dbName string) api.Database {
 	p.mux.Lock()
 	defer p.mux.Unlock()
 	dbHandle := p.dbHandles[dbName]

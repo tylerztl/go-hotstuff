@@ -6,8 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/zhigui-projects/go-hotstuff/common/crypto"
-	"github.com/zhigui-projects/go-hotstuff/common/log"
+	"github.com/zhigui-projects/go-hotstuff/api"
 	"github.com/zhigui-projects/go-hotstuff/common/utils"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
@@ -16,13 +15,13 @@ type ReplicaID int64
 
 // ReplicaInfo holds information about a replica
 type ReplicaInfo struct {
-	Verifier crypto.Verifier
+	Verifier api.Verifier
 }
 
 type ReplicaConf struct {
 	Metadata *pb.ConfigMetadata
 	Replicas map[ReplicaID]*ReplicaInfo
-	Logger   log.Logger
+	Logger   api.Logger
 }
 
 // VerifyQuorumCert will verify a QuorumCert from public keys stored in ReplicaConf
@@ -39,7 +38,7 @@ func (rc *ReplicaConf) VerifyQuorumCert(qc *pb.QuorumCert) bool {
 			continue
 		}
 		wg.Add(1)
-		go func(pc *pb.PartCert, verifier crypto.Verifier) {
+		go func(pc *pb.PartCert, verifier api.Verifier) {
 			if ok, err := verifier.Verify(pc.Signature, qc.BlockHash); err == nil && ok {
 				atomic.AddUint64(&numVerified, 1)
 			} else {

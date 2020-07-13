@@ -4,40 +4,18 @@ import (
 	"fmt"
 
 	"github.com/inconshreveable/log15"
+	"github.com/zhigui-projects/go-hotstuff/api"
 )
 
-var defaultLogger Logger
+var defaultLogger api.Logger
 
-type Logger interface {
-	// New returns a new Logger that has this logger's context plus the given context
-	New(ctx ...interface{}) Logger
-
-	Debug(v ...interface{})
-	Debugf(format string, v ...interface{})
-
-	Error(v ...interface{})
-	Errorf(format string, v ...interface{})
-
-	Info(v ...interface{})
-	Infof(format string, v ...interface{})
-
-	Warning(v ...interface{})
-	Warningf(format string, v ...interface{})
-
-	Fatal(v ...interface{})
-	Fatalf(format string, v ...interface{})
-
-	Panic(v ...interface{})
-	Panicf(format string, v ...interface{})
-}
-
-func SetLogger(l Logger) {
+func SetLogger(l api.Logger) {
 	defaultLogger = l
 }
 
-func GetLogger(ctx ...interface{}) Logger {
+func GetLogger(ctx ...interface{}) api.Logger {
 	if defaultLogger == nil {
-		defaultLogger = Logger(&DefaultLogger{New("logger", "hotstuff")})
+		defaultLogger = api.Logger(&DefaultLogger{New("logger", "hotstuff")})
 	}
 	if len(ctx) == 0 {
 		return defaultLogger
@@ -50,7 +28,7 @@ type DefaultLogger struct {
 	log15.Logger
 }
 
-func (l *DefaultLogger) New(ctx ...interface{}) Logger {
+func (l *DefaultLogger) New(ctx ...interface{}) api.Logger {
 	return &DefaultLogger{l.Logger.New(ctx...)}
 }
 

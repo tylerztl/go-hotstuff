@@ -9,13 +9,14 @@ import (
 	"code.cloudfoundry.org/clock"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/zhigui-projects/go-hotstuff/api"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/common/utils"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 )
 
 type RoundRobinPM struct {
-	HotStuff
+	api.HotStuff
 
 	replicaId  int64
 	metadata   *pb.ConfigMetadata
@@ -26,10 +27,10 @@ type RoundRobinPM struct {
 	waitTimer  clock.Timer
 	decideExec func(cmds []byte)
 	mut        sync.Mutex
-	logger     log.Logger
+	logger     api.Logger
 }
 
-func NewRoundRobinPM(hs HotStuff, replicaId int64, metadata *pb.ConfigMetadata, decideExec func(cmds []byte)) PaceMaker {
+func NewRoundRobinPM(hs api.HotStuff, replicaId int64, metadata *pb.ConfigMetadata, decideExec func(cmds []byte)) api.PaceMaker {
 	waitTimer := clock.NewClock().NewTimer(time.Duration(metadata.MsgWaitTimeout) * time.Second)
 	waitTimer.Stop()
 

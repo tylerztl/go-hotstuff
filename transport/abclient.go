@@ -5,24 +5,19 @@ import (
 	"strconv"
 
 	"github.com/pkg/errors"
+	"github.com/zhigui-projects/go-hotstuff/api"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/pb"
 	"google.golang.org/grpc/metadata"
 )
 
-type BroadcastClient interface {
-	Send(msg *pb.Message) error
-	Recv() (*pb.Message, error)
-	Close() error
-}
-
 type abClient struct {
 	client pb.AtomicBroadcast_BroadcastClient
-	logger log.Logger
+	logger api.Logger
 }
 
 // NewBroadcastClient creates a simple instance of the BroadcastClient interface
-func NewBroadcastClient(address string, replicaId int64, opts *TLSOptions) (BroadcastClient, error) {
+func NewBroadcastClient(address string, replicaId int64, opts *TLSOptions) (api.BroadcastClient, error) {
 	client, err := NewGrpcClient(opts)
 	if err != nil {
 		return nil, err

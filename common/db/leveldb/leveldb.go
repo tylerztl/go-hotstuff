@@ -93,12 +93,7 @@ func (db *DB) Close() {
 // Get returns the value for the given key
 func (db *DB) Get(key []byte) ([]byte, error) {
 	value, err := db.db.Get(key, db.readOpts)
-	if err == leveldb.ErrNotFound {
-		value = nil
-		err = nil
-	}
 	if err != nil {
-		logger.Error("Error retrieving leveldb key", "key", key, "error", err)
 		return nil, errors.Wrapf(err, "error retrieving leveldb key [%#v]", key)
 	}
 	return value, nil
@@ -108,7 +103,6 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 func (db *DB) Put(key []byte, value []byte) error {
 	err := db.db.Put(key, value, db.writeOptsSync)
 	if err != nil {
-		logger.Error("Error writing leveldb key", "key", key)
 		return errors.Wrapf(err, "error writing leveldb key [%#v]", key)
 	}
 	return nil
@@ -118,7 +112,6 @@ func (db *DB) Put(key []byte, value []byte) error {
 func (db *DB) Delete(key []byte) error {
 	err := db.db.Delete(key, db.writeOptsSync)
 	if err != nil {
-		logger.Error("Error deleting leveldb key", "key", key)
 		return errors.Wrapf(err, "error deleting leveldb key [%#v]", key)
 	}
 	return nil
