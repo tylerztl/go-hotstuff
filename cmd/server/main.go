@@ -109,6 +109,8 @@ func startCmd() *cobra.Command {
 	return nodeStartCmd
 }
 
+//go:generate protoc --proto_path ../../pb --go_out=plugins=grpc:../../pb ab.proto
+//go:generate protoc --proto_path ../../pb --go_out=plugins=grpc:../../pb hotstuff.proto
 func main() {
 	mainCmd.AddCommand(startCmd())
 	// On failure Cobra prints the usage message and error string, so we only

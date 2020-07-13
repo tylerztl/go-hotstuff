@@ -21,11 +21,11 @@ type RoundRobinPM struct {
 	metadata   *pb.ConfigMetadata
 	curView    int64
 	views      map[int64]map[int64]*pb.NewView // ViewNumber ~ ReplicaID
-	mut        *sync.Mutex
 	submitC    chan []byte
 	doneC      chan struct{} // Closes when the consensus halts
 	waitTimer  clock.Timer
 	decideExec func(cmds []byte)
+	mut        sync.Mutex
 	logger     log.Logger
 }
 
@@ -39,7 +39,6 @@ func NewRoundRobinPM(hs HotStuff, replicaId int64, metadata *pb.ConfigMetadata, 
 		metadata:   metadata,
 		curView:    0,
 		views:      make(map[int64]map[int64]*pb.NewView),
-		mut:        new(sync.Mutex),
 		submitC:    make(chan []byte, 100),
 		doneC:      make(chan struct{}),
 		waitTimer:  waitTimer,
@@ -98,7 +97,7 @@ func (r *RoundRobinPM) GetCurLeader(viewNumber int64) int64 {
 func (r *RoundRobinPM) OnNextSyncView() {
 	leader := r.GetLeader(atomic.LoadInt64(&r.curView))
 	atomic.AddInt64(&r.curView, 1)
-	r.logger.Debug("enter next view", "view", atomic.LoadInt64(&r.curView), "leader", leader)
+	r.logger.Debug("enter next sync view", "view", atomic.LoadInt64(&r.curView), "leader", leader)
 
 	if leader != r.replicaId {
 		// TODO 逻辑待推敲
@@ -185,17 +184,17 @@ func (r *RoundRobinPM) OnReceiveNewView(id int64, newView *pb.NewView) {
 
 	r.logger.Debug("receive new view msg", "genericView", newView.GetGenericQc().ViewNumber,
 		"hqcView", r.GetHighQC().ViewNumber, "viewNumber", newView.ViewNumber, "curView", r.curView)
-	
-	// TODO Proposal Message可能在NewView Message之后到达
+
+	// TODO Proposal Message可能在NewView Message之后到达, 可能造成分叉
 	block, err := r.LoadBlock(newView.GetGenericQc().BlockHash)
 	if err != nil {
 		r.logger.Error("receive new view load generic block failed", "error", err)
 		return
 	}
 
+	r.mut.Lock()
 	if newView.GetGenericQc().ViewNumber > r.GetHighQC().ViewNumber {
 		// 当接收到的hqc比当前hqc高时，如果当前副本没有需要处理的proposal，则直接new-view，无需超时等待
-		// TODO block getting
 		if block != nil {
 			r.UpdateHighestQC(block, newView.GenericQc)
 		}
@@ -205,6 +204,7 @@ func (r *RoundRobinPM) OnReceiveNewView(id int64, newView *pb.NewView) {
 		} else {
 			go r.OnNextSyncView()
 		}
+		r.mut.Unlock()
 		return
 	} else if newView.ViewNumber > atomic.LoadInt64(&r.curView) {
 		// 副本间同步view number
@@ -212,13 +212,16 @@ func (r *RoundRobinPM) OnReceiveNewView(id int64, newView *pb.NewView) {
 		atomic.StoreInt64(&r.curView, newView.ViewNumber)
 		viewMsg, err := r.createSignedViewChange()
 		if err != nil {
+			r.mut.Unlock()
 			r.logger.Error("create signed view change msg failed when sync new view number", "error", err)
 			return
 		}
+		r.mut.Unlock()
 		go r.BroadcastMsg(viewMsg)
 		r.startNewViewTimer()
 		return
 	}
+	r.mut.Unlock()
 
 	highView := r.addNewViewMsg(id, newView)
 	if highView == nil {
@@ -298,7 +301,10 @@ func (r *RoundRobinPM) clearViews() {
 	}
 }
 
-func (r *RoundRobinPM) OnQcFinishEvent() {
+func (r *RoundRobinPM) OnQcFinishEvent(qc *pb.QuorumCert) {
+	if qc.ViewNumber > atomic.LoadInt64(&r.curView) {
+		atomic.StoreInt64(&r.curView, qc.ViewNumber)
+	}
 	if r.GetLeader(atomic.LoadInt64(&r.curView)) == r.replicaId {
 		atomic.AddInt64(&r.curView, 1)
 		r.logger.Debug("enter next view", "view", atomic.LoadInt64(&r.curView), "leader", r.GetLeader(atomic.LoadInt64(&r.curView)))

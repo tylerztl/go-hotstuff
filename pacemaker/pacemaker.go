@@ -18,6 +18,7 @@ type HotStuff interface {
 	OnProposalVote(vote *pb.Vote) error
 	UpdateHighestQC(block *pb.Block, qc *pb.QuorumCert)
 	GetHighQC() *pb.QuorumCert
+	GetVoteHeight() int64
 	LoadBlock(hash []byte) (*pb.Block, error)
 	GetConnectStatus(id int64) bool
 }
@@ -40,7 +41,7 @@ type PaceMaker interface {
 	// 监听到接收到其他节点发来的new view消息的事件
 	OnReceiveNewView(id int64, newView *pb.NewView)
 	// 收集到n-f个proposal vote事件
-	OnQcFinishEvent()
+	OnQcFinishEvent(qc *pb.QuorumCert)
 	// 区块完成Decide阶段，达成共识，执行交易
 	DoDecide(block *pb.Block)
 	// highest qc 更新事件

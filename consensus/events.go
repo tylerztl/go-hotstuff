@@ -41,7 +41,7 @@ type QcFinishEvent struct {
 }
 
 func (q *QcFinishEvent) ExecuteEvent(pm pacemaker.PaceMaker) {
-	pm.OnQcFinishEvent()
+	pm.OnQcFinishEvent(q.Qc)
 }
 
 type HqcUpdateEvent struct {
