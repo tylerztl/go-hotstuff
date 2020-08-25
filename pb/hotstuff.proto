@@ -8,6 +8,8 @@ syntax = "proto3";
 
 package pb;
 
+option go_package = "./pb";
+
 // Sign verify part cert info
 message PartCert {
     int64 replica_id = 1;

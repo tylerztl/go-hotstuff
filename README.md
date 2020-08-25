@@ -15,31 +15,22 @@ The implementation is inspired by the [libhotstuff project](https://github.com/h
 ## Getting started
 
 ### build project
-```
+```bash
 make build
 ```
 
-### run replica 0
-```
-./output/hotstuff-server start --replicaId 0 -p 8000
-```
+### start four replica nodes on the different terminals
+```bash
+make server node_id=0
 
-### run replica 1 on new terminal
-```
-./output/hotstuff-server start --replicaId 1 -p 8001
-```
+make server node_id=1
 
-### run replica 2 on new terminal
-```
-./output/hotstuff-server start --replicaId 2 -p 8002
-```
+make server node_id=2
 
-### run replica 3 on new terminal
-```
-./output/hotstuff-server start --replicaId 3 -p 8003
+make server node_id=3
 ```
 
 ### run client to send proposal request
 ```
-./output/hotstuff-client --server 127.0.0.1:8000
+make client
 ```
