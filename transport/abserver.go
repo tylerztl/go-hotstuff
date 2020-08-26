@@ -33,7 +33,7 @@ func NewABServer() api.BroadcastServer {
 	}
 }
 
-func (a *abServer) Broadcast(_ *pb.Handshake, srv pb.AtomicBroadcast_BroadcastServer) error {
+func (a *abServer) Handshake(_ *pb.Empty, srv pb.Consensus_HandshakeServer) error {
 	addr, src := extractRemoteAddress(srv.Context())
 	a.logger.Debug("Starting new broadcast handler for remote peer", "addr", addr, "replicaId", src)
 
@@ -61,7 +61,7 @@ func (a *abServer) Broadcast(_ *pb.Handshake, srv pb.AtomicBroadcast_BroadcastSe
 	return err
 }
 
-func (a *abServer) BroadcastMsg(msg *pb.Message) error {
+func (a *abServer) Broadcast(msg *pb.Message) error {
 	if msg == nil {
 		return errors.New("broadcast msg is null")
 	}
@@ -74,7 +74,7 @@ func (a *abServer) BroadcastMsg(msg *pb.Message) error {
 	return nil
 }
 
-func (a *abServer) UnicastMsg(msg *pb.Message, dest int64) error {
+func (a *abServer) Unicast(msg *pb.Message, dest int64) error {
 	if msg == nil {
 		return errors.New("unicast msg is null")
 	}

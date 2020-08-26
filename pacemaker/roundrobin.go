@@ -83,7 +83,11 @@ func (r *RoundRobinPM) OnBeat() {
 		// 节点启动后第一次处理交易，如果不是leader, proposal转发给当前leader
 		leader := r.GetCurLeader(atomic.LoadInt64(&r.curView))
 		if leader != r.replicaId {
-			go r.UnicastMsg(&pb.Message{Type: &pb.Message_Forward{Forward: &pb.Forward{Data: s}}}, leader)
+			go func() {
+				if err := r.Unicast(&pb.Message{Type: &pb.Message_Forward{Forward: &pb.Forward{Data: s}}}, leader); err != nil {
+					r.logger.Error("OnBeat: msg forward failed", "to", leader, "err", err)
+				}
+			}()
 			r.startNewViewTimer()
 		} else {
 			if err := r.OnPropose(atomic.LoadInt64(&r.curView), r.GetHighQC().BlockHash, s); err != nil {
@@ -119,7 +123,7 @@ func (r *RoundRobinPM) OnNextSyncView() {
 			r.logger.Error("create signed view change msg failed when unicast next new view msg", "error", err)
 			return
 		}
-		_ = r.UnicastMsg(viewMsg, leader)
+		_ = r.Unicast(viewMsg, leader)
 	} else {
 		if len(r.submitC) > 0 {
 			// 当leader == r.GetID()时，由 ReceiveNewView 事件来触发 propose, 因为可能需要updateHighestQC
@@ -147,7 +151,7 @@ func (r *RoundRobinPM) OnProposeEvent(proposal *pb.Proposal) {
 	}
 
 	// 出块后，广播区块到其他副本
-	go r.BroadcastMsg(&pb.Message{Type: &pb.Message_Proposal{Proposal: proposal}})
+	go r.Broadcast(&pb.Message{Type: &pb.Message_Proposal{Proposal: proposal}})
 }
 
 func (r *RoundRobinPM) OnReceiveProposal(proposal *pb.Proposal, vote *pb.Vote) {
@@ -173,7 +177,7 @@ func (r *RoundRobinPM) OnReceiveProposal(proposal *pb.Proposal, vote *pb.Vote) {
 	// 接收到Proposal投票后，判断当前节点是不是下一轮的leader，如果是leader，处理投票结果；如果不是leader，发送给下个leader
 	leader := r.GetLeader(proposal.ViewNumber)
 	if leader != r.replicaId {
-		if err := r.UnicastMsg(&pb.Message{Type: &pb.Message_Vote{Vote: vote}}, leader); err != nil {
+		if err := r.Unicast(&pb.Message{Type: &pb.Message_Vote{Vote: vote}}, leader); err != nil {
 			r.logger.Error("unicast proposal vote msg error failed", "to", leader, "err", err)
 		}
 	} else {
@@ -224,7 +228,7 @@ func (r *RoundRobinPM) OnReceiveNewView(id int64, newView *pb.NewView) {
 			return
 		}
 		r.mut.Unlock()
-		go r.BroadcastMsg(viewMsg)
+		go r.Broadcast(viewMsg)
 		r.startNewViewTimer()
 		return
 	}

@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package consensus
 
 import (
-	"io"
 	"time"
 
 	"github.com/zhigui-projects/go-hotstuff/api"
@@ -45,7 +44,7 @@ func NewNodeManager(id ReplicaID, replicas []*NodeInfo, logger api.Logger) *Node
 			}
 
 			server := transport.NewABServer()
-			pb.RegisterAtomicBroadcastServer(grpcServer.Server(), server)
+			pb.RegisterConsensusServer(grpcServer.Server(), server)
 			mgr.BroadcastServer = server
 			mgr.GrpcServer = grpcServer
 			node.Connected = true
@@ -91,9 +90,6 @@ func (n *NodeManager) ConnectWorkers(queue chan<- MsgExecutor) {
 
 				for {
 					msg, err := bc.Recv()
-					if err == io.EOF {
-						break
-					}
 					if err != nil {
 						n.Logger.Warning("consensus stream with replica node broke", "id", node.Id, "address", node.Addr, "error", err)
 						break

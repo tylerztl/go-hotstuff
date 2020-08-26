@@ -12,14 +12,12 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/api"
-	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/protos/pb"
 	"google.golang.org/grpc/metadata"
 )
 
 type abClient struct {
-	client pb.AtomicBroadcast_BroadcastClient
-	logger api.Logger
+	client pb.Consensus_HandshakeClient
 }
 
 // NewBroadcastClient creates a simple instance of the BroadcastClient interface
@@ -35,18 +33,17 @@ func NewBroadcastClient(address string, replicaId int64, opts *TLSOptions) (api.
 
 	// 在 grpc 中，client 与 server 之间通过 context 传递上下文数据的时候，不能使用 context.WithValue。
 	md := metadata.Pairs("replicaid", strconv.Itoa(int(replicaId)))
-	bc, err := pb.NewAtomicBroadcastClient(conn).Broadcast(metadata.NewOutgoingContext(context.Background(), md), &pb.Handshake{})
+	bc, err := pb.NewConsensusClient(conn).Handshake(metadata.NewOutgoingContext(context.Background(), md), &pb.Empty{})
 	if err != nil {
 		return nil, err
 	}
 
-	return &abClient{client: bc, logger: log.GetLogger("module", "transport", "node", replicaId)}, nil
+	return &abClient{client: bc}, nil
 }
 
 func (a *abClient) Recv() (*pb.Message, error) {
 	msg, err := a.client.Recv()
 	if err != nil {
-		a.logger.Error("broadcast client recv msg failed", "error", err)
 		return nil, err
 	}
 	return msg, nil

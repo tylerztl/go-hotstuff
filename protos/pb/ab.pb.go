@@ -34,14 +34,14 @@ const (
 // of the legacy proto package is being used.
 const _ = proto.ProtoPackageIsVersion4
 
-type Handshake struct {
+type Empty struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 }
 
-func (x *Handshake) Reset() {
-	*x = Handshake{}
+func (x *Empty) Reset() {
+	*x = Empty{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_ab_proto_msgTypes[0]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -49,13 +49,13 @@ func (x *Handshake) Reset() {
 	}
 }
 
-func (x *Handshake) String() string {
+func (x *Empty) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Handshake) ProtoMessage() {}
+func (*Empty) ProtoMessage() {}
 
-func (x *Handshake) ProtoReflect() protoreflect.Message {
+func (x *Empty) ProtoReflect() protoreflect.Message {
 	mi := &file_ab_proto_msgTypes[0]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -67,8 +67,8 @@ func (x *Handshake) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Handshake.ProtoReflect.Descriptor instead.
-func (*Handshake) Descriptor() ([]byte, []int) {
+// Deprecated: Use Empty.ProtoReflect.Descriptor instead.
+func (*Empty) Descriptor() ([]byte, []int) {
 	return file_ab_proto_rawDescGZIP(), []int{0}
 }
 
@@ -76,16 +76,15 @@ var File_ab_proto protoreflect.FileDescriptor
 
 var file_ab_proto_rawDesc = []byte{
 	0x0a, 0x08, 0x61, 0x62, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x02, 0x70, 0x62, 0x1a, 0x0e,
-	0x68, 0x6f, 0x74, 0x73, 0x74, 0x75, 0x66, 0x66, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x0b,
-	0x0a, 0x09, 0x48, 0x61, 0x6e, 0x64, 0x73, 0x68, 0x61, 0x6b, 0x65, 0x32, 0x3c, 0x0a, 0x0f, 0x41,
-	0x74, 0x6f, 0x6d, 0x69, 0x63, 0x42, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x12, 0x29,
-	0x0a, 0x09, 0x42, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x12, 0x0d, 0x2e, 0x70, 0x62,
-	0x2e, 0x48, 0x61, 0x6e, 0x64, 0x73, 0x68, 0x61, 0x6b, 0x65, 0x1a, 0x0b, 0x2e, 0x70, 0x62, 0x2e,
-	0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x30, 0x01, 0x42, 0x32, 0x5a, 0x30, 0x67, 0x69, 0x74,
-	0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x7a, 0x68, 0x69, 0x67, 0x75, 0x69, 0x2d, 0x70,
-	0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x68, 0x6f, 0x74, 0x73, 0x74,
-	0x75, 0x66, 0x66, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x2f, 0x70, 0x62, 0x62, 0x06, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x68, 0x6f, 0x74, 0x73, 0x74, 0x75, 0x66, 0x66, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x07,
+	0x0a, 0x05, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x32, 0x32, 0x0a, 0x09, 0x43, 0x6f, 0x6e, 0x73, 0x65,
+	0x6e, 0x73, 0x75, 0x73, 0x12, 0x25, 0x0a, 0x09, 0x48, 0x61, 0x6e, 0x64, 0x73, 0x68, 0x61, 0x6b,
+	0x65, 0x12, 0x09, 0x2e, 0x70, 0x62, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x0b, 0x2e, 0x70,
+	0x62, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x30, 0x01, 0x42, 0x32, 0x5a, 0x30, 0x67,
+	0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x7a, 0x68, 0x69, 0x67, 0x75, 0x69,
+	0x2d, 0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x68, 0x6f, 0x74,
+	0x73, 0x74, 0x75, 0x66, 0x66, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x2f, 0x70, 0x62, 0x62,
+	0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -102,12 +101,12 @@ func file_ab_proto_rawDescGZIP() []byte {
 
 var file_ab_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_ab_proto_goTypes = []interface{}{
-	(*Handshake)(nil), // 0: pb.Handshake
-	(*Message)(nil),   // 1: pb.Message
+	(*Empty)(nil),   // 0: pb.Empty
+	(*Message)(nil), // 1: pb.Message
 }
 var file_ab_proto_depIdxs = []int32{
-	0, // 0: pb.AtomicBroadcast.Broadcast:input_type -> pb.Handshake
-	1, // 1: pb.AtomicBroadcast.Broadcast:output_type -> pb.Message
+	0, // 0: pb.Consensus.Handshake:input_type -> pb.Empty
+	1, // 1: pb.Consensus.Handshake:output_type -> pb.Message
 	1, // [1:2] is the sub-list for method output_type
 	0, // [0:1] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
@@ -123,7 +122,7 @@ func file_ab_proto_init() {
 	file_hotstuff_proto_init()
 	if !protoimpl.UnsafeEnabled {
 		file_ab_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Handshake); i {
+			switch v := v.(*Empty); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -163,27 +162,27 @@ var _ grpc.ClientConnInterface
 // is compatible with the grpc package it is being compiled against.
 const _ = grpc.SupportPackageIsVersion6
 
-// AtomicBroadcastClient is the client API for AtomicBroadcast service.
+// ConsensusClient is the client API for Consensus service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type AtomicBroadcastClient interface {
-	Broadcast(ctx context.Context, in *Handshake, opts ...grpc.CallOption) (AtomicBroadcast_BroadcastClient, error)
+type ConsensusClient interface {
+	Handshake(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Consensus_HandshakeClient, error)
 }
 
-type atomicBroadcastClient struct {
+type consensusClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewAtomicBroadcastClient(cc grpc.ClientConnInterface) AtomicBroadcastClient {
-	return &atomicBroadcastClient{cc}
+func NewConsensusClient(cc grpc.ClientConnInterface) ConsensusClient {
+	return &consensusClient{cc}
 }
 
-func (c *atomicBroadcastClient) Broadcast(ctx context.Context, in *Handshake, opts ...grpc.CallOption) (AtomicBroadcast_BroadcastClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_AtomicBroadcast_serviceDesc.Streams[0], "/pb.AtomicBroadcast/Broadcast", opts...)
+func (c *consensusClient) Handshake(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Consensus_HandshakeClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Consensus_serviceDesc.Streams[0], "/pb.Consensus/Handshake", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &atomicBroadcastBroadcastClient{stream}
+	x := &consensusHandshakeClient{stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -193,16 +192,16 @@ func (c *atomicBroadcastClient) Broadcast(ctx context.Context, in *Handshake, op
 	return x, nil
 }
 
-type AtomicBroadcast_BroadcastClient interface {
+type Consensus_HandshakeClient interface {
 	Recv() (*Message, error)
 	grpc.ClientStream
 }
 
-type atomicBroadcastBroadcastClient struct {
+type consensusHandshakeClient struct {
 	grpc.ClientStream
 }
 
-func (x *atomicBroadcastBroadcastClient) Recv() (*Message, error) {
+func (x *consensusHandshakeClient) Recv() (*Message, error) {
 	m := new(Message)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -210,52 +209,52 @@ func (x *atomicBroadcastBroadcastClient) Recv() (*Message, error) {
 	return m, nil
 }
 
-// AtomicBroadcastServer is the server API for AtomicBroadcast service.
-type AtomicBroadcastServer interface {
-	Broadcast(*Handshake, AtomicBroadcast_BroadcastServer) error
+// ConsensusServer is the server API for Consensus service.
+type ConsensusServer interface {
+	Handshake(*Empty, Consensus_HandshakeServer) error
 }
 
-// UnimplementedAtomicBroadcastServer can be embedded to have forward compatible implementations.
-type UnimplementedAtomicBroadcastServer struct {
+// UnimplementedConsensusServer can be embedded to have forward compatible implementations.
+type UnimplementedConsensusServer struct {
 }
 
-func (*UnimplementedAtomicBroadcastServer) Broadcast(*Handshake, AtomicBroadcast_BroadcastServer) error {
-	return status.Errorf(codes.Unimplemented, "method Broadcast not implemented")
+func (*UnimplementedConsensusServer) Handshake(*Empty, Consensus_HandshakeServer) error {
+	return status.Errorf(codes.Unimplemented, "method Handshake not implemented")
 }
 
-func RegisterAtomicBroadcastServer(s *grpc.Server, srv AtomicBroadcastServer) {
-	s.RegisterService(&_AtomicBroadcast_serviceDesc, srv)
+func RegisterConsensusServer(s *grpc.Server, srv ConsensusServer) {
+	s.RegisterService(&_Consensus_serviceDesc, srv)
 }
 
-func _AtomicBroadcast_Broadcast_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(Handshake)
+func _Consensus_Handshake_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(Empty)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(AtomicBroadcastServer).Broadcast(m, &atomicBroadcastBroadcastServer{stream})
+	return srv.(ConsensusServer).Handshake(m, &consensusHandshakeServer{stream})
 }
 
-type AtomicBroadcast_BroadcastServer interface {
+type Consensus_HandshakeServer interface {
 	Send(*Message) error
 	grpc.ServerStream
 }
 
-type atomicBroadcastBroadcastServer struct {
+type consensusHandshakeServer struct {
 	grpc.ServerStream
 }
 
-func (x *atomicBroadcastBroadcastServer) Send(m *Message) error {
+func (x *consensusHandshakeServer) Send(m *Message) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-var _AtomicBroadcast_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "pb.AtomicBroadcast",
-	HandlerType: (*AtomicBroadcastServer)(nil),
+var _Consensus_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "pb.Consensus",
+	HandlerType: (*ConsensusServer)(nil),
 	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "Broadcast",
-			Handler:       _AtomicBroadcast_Broadcast_Handler,
+			StreamName:    "Handshake",
+			Handler:       _Consensus_Handshake_Handler,
 			ServerStreams: true,
 		},
 	},
