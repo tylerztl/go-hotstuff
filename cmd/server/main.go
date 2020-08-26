@@ -157,7 +157,7 @@ var replicas = &consensus.ReplicaConf{
 		2: {Verifier: &crypto.ECDSAVerifier{Pub: &replica2PK.PublicKey}},
 		3: {Verifier: &crypto.ECDSAVerifier{Pub: &replica3PK.PublicKey}},
 	},
-	Logger: log.GetLogger("module", "consensus"),
+	Logger: log.GetLogger("module", "consensus", "node", replicaId),
 }
 
 func serve(args []string) error {

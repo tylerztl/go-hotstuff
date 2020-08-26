@@ -59,6 +59,11 @@ type HotStuffCore struct {
 	notifyChan chan EventNotifier
 
 	logger api.Logger
+
+	cond *sync.Cond
+
+	// set of tail blocks
+	//tails []*pb.Block
 }
 
 func NewHotStuffCore(id ReplicaID, signer api.Signer, replicas *ReplicaConf, logger api.Logger) *HotStuffCore {
@@ -77,6 +82,7 @@ func NewHotStuffCore(id ReplicaID, signer api.Signer, replicas *ReplicaConf, log
 		replicas:     replicas,
 		notifyChan:   make(chan EventNotifier),
 		logger:       logger,
+		cond:         sync.NewCond(new(sync.Mutex)),
 	}
 	genesis.SelfQc = &pb.QuorumCert{ViewNumber: -1, BlockHash: hash, Signs: make(map[int64]*pb.PartCert)}
 	hsc.genericQC = genesis.SelfQc
@@ -87,6 +93,9 @@ func NewHotStuffCore(id ReplicaID, signer api.Signer, replicas *ReplicaConf, log
 	return hsc
 }
 
+// Submit new commands to be decided (executed).
+// "Parents" must contain at least one block, and the first block is the actual parent,
+// while the others are uncles/aunts.
 func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error {
 	block, err := hsc.LoadBlock(parentHash)
 	if err != nil {
@@ -126,12 +135,19 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 	return nil
 }
 
+// 消息异步：不同height的proposal接收到的先后顺序是不确定的
 func (hsc *HotStuffCore) OnReceiveProposal(prop *pb.Proposal) error {
-	hsc.logger.Info("receive proposal msg", "proposer", prop.Block.Proposer, "height", prop.Block.Height,
+	hsc.logger.Debug("OnReceiveProposal: receive new proposal", "proposer", prop.Block.Proposer, "height", prop.Block.Height,
 		"voteHeight", hsc.GetVoteHeight(), "hash", hex.EncodeToString(prop.Block.SelfQc.BlockHash))
 
 	block := prop.Block
 	hsc.StoreBlock(block)
+
+	// TODO
+	hsc.cond.Broadcast()
+	if _, err := hsc.AsyncWaitBlock(block.Justify.BlockHash); err != nil {
+		return errors.Errorf("OnReceiveProposal: not found expected block [%x]", block.Justify.BlockHash)
+	}
 
 	if err := hsc.update(block); err != nil {
 		return err
@@ -174,6 +190,7 @@ func (hsc *HotStuffCore) OnReceiveProposal(prop *pb.Proposal) error {
 	return nil
 }
 
+// 消息异步：Proposal Message可能在Vote Message之后到达
 func (hsc *HotStuffCore) OnProposalVote(vote *pb.Vote) error {
 	block, _ := hsc.LoadBlock(vote.BlockHash)
 	if block == nil {
@@ -456,4 +473,17 @@ func (hsc *HotStuffCore) LoadBlock(hash []byte) (*pb.Block, error) {
 		return nil, err
 	}
 	return block.(*pb.Block), nil
+}
+
+func (hsc *HotStuffCore) AsyncWaitBlock(hash []byte) (block *pb.Block, err error) {
+	block, err = hsc.LoadBlock(hash)
+	if block != nil {
+		return block, nil
+	}
+
+	hsc.cond.L.Lock()
+	hsc.cond.Wait()
+	hsc.cond.L.Unlock()
+
+	return hsc.LoadBlock(hash)
 }

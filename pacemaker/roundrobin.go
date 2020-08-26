@@ -50,7 +50,7 @@ func NewRoundRobinPM(hs api.HotStuff, replicaId int64, metadata *pb.ConfigMetada
 		doneC:      make(chan struct{}),
 		waitTimer:  waitTimer,
 		decideExec: decideExec,
-		logger:     log.GetLogger("module", "pacemaker"),
+		logger:     log.GetLogger("module", "pacemaker", "node", replicaId),
 	}
 }
 
@@ -193,7 +193,7 @@ func (r *RoundRobinPM) OnReceiveNewView(id int64, newView *pb.NewView) {
 		"hqcView", r.GetHighQC().ViewNumber, "viewNumber", newView.ViewNumber, "curView", r.curView)
 
 	// TODO Proposal Message可能在NewView Message之后到达, 可能造成分叉
-	block, err := r.LoadBlock(newView.GetGenericQc().BlockHash)
+	block, err := r.AsyncWaitBlock(newView.GetGenericQc().BlockHash)
 	if err != nil {
 		r.logger.Error("receive new view load generic block failed", "error", err)
 		return

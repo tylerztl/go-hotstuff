@@ -40,7 +40,7 @@ func NewBroadcastClient(address string, replicaId int64, opts *TLSOptions) (api.
 		return nil, err
 	}
 
-	return &abClient{client: bc, logger: log.GetLogger("module", "transport")}, nil
+	return &abClient{client: bc, logger: log.GetLogger("module", "transport", "node", replicaId)}, nil
 }
 
 func (a *abClient) Recv() (*pb.Message, error) {

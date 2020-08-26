@@ -161,10 +161,5 @@ func (hsb *HotStuffBase) handleVote(id ReplicaID, vote *pb.Vote) {
 }
 
 func (hsb *HotStuffBase) handleForward(id ReplicaID, msg *pb.Forward) {
-	if len(msg.Data) == 0 {
-		hsb.logger.Error("receive invalid forward msg data", "from", id)
-		return
-	}
-
 	_ = hsb.PaceMaker.Submit(msg.Data)
 }

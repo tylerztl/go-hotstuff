@@ -23,6 +23,7 @@ type HotStuff interface {
 	UpdateHighestQC(block *pb.Block, qc *pb.QuorumCert)
 	GetHighQC() *pb.QuorumCert
 	GetVoteHeight() int64
-	LoadBlock(hash []byte) (*pb.Block, error)
 	GetConnectStatus(id int64) bool
+	LoadBlock(hash []byte) (block *pb.Block, err error)
+	AsyncWaitBlock(hash []byte) (block *pb.Block, err error)
 }
