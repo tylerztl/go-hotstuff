@@ -19,7 +19,7 @@ import (
 	"github.com/zhigui-projects/go-hotstuff/common/log"
 	"github.com/zhigui-projects/go-hotstuff/consensus"
 	"github.com/zhigui-projects/go-hotstuff/pacemaker"
-	"github.com/zhigui-projects/go-hotstuff/pb"
+	"github.com/zhigui-projects/go-hotstuff/protos/pb"
 )
 
 const (

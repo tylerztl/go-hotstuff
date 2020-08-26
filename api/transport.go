@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 package api
 
-import "github.com/zhigui-projects/go-hotstuff/pb"
+import "github.com/zhigui-projects/go-hotstuff/protos/pb"
 
 type BroadcastServer interface {
 	pb.AtomicBroadcastServer
@@ -15,7 +15,6 @@ type BroadcastServer interface {
 }
 
 type BroadcastClient interface {
-	Send(msg *pb.Message) error
 	Recv() (*pb.Message, error)
 	Close() error
 }

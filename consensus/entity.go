@@ -14,7 +14,7 @@ import (
 
 	"github.com/zhigui-projects/go-hotstuff/api"
 	"github.com/zhigui-projects/go-hotstuff/common/utils"
-	"github.com/zhigui-projects/go-hotstuff/pb"
+	"github.com/zhigui-projects/go-hotstuff/protos/pb"
 )
 
 type ReplicaID int64

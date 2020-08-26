@@ -8,7 +8,7 @@ package consensus
 
 import (
 	"github.com/zhigui-projects/go-hotstuff/api"
-	"github.com/zhigui-projects/go-hotstuff/pb"
+	"github.com/zhigui-projects/go-hotstuff/protos/pb"
 )
 
 type EventNotifier interface {

@@ -8,10 +8,13 @@ syntax = "proto3";
 
 package pb;
 
-option go_package = "./pb";
+option go_package = "github.com/zhigui-projects/go-hotstuff/protos/pb";
 
 import "hotstuff.proto";
 
 service AtomicBroadcast {
-    rpc Broadcast (stream pb.Message) returns (stream pb.Message);
+    rpc Broadcast (Handshake) returns (stream pb.Message);
+}
+
+message Handshake {
 }

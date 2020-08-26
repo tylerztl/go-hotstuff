@@ -8,7 +8,7 @@ syntax = "proto3";
 
 package pb;
 
-option go_package = "./pb";
+option go_package = "github.com/zhigui-projects/go-hotstuff/protos/pb";
 
 // Sign verify part cert info
 message PartCert {
@@ -46,11 +46,12 @@ message Block {
 
 // Types of communication messages between replicas
 message Message {
+    string chain_id = 1;
     oneof type {
-        ViewChange view_change = 1;
-        Proposal proposal = 2;
-        Vote vote = 3;
-        Forward forward = 4;
+        ViewChange view_change = 2;
+        Proposal proposal = 3;
+        Vote vote = 4;
+        Forward forward = 5;
     };
 }
 
@@ -68,8 +69,7 @@ message NewView {
 // broadcast proposal to other replicas
 message Proposal {
     int64 view_number = 1;
-    int64 proposer = 2;
-    Block block = 3;
+    Block block = 2;
 }
 
 // Vote messages
@@ -111,7 +111,8 @@ enum Status {
 }
 
 message SubmitRequest {
-    bytes cmds = 1;
+    string chain_id = 1;
+    bytes cmds = 2;
 }
 
 message SubmitResponse {

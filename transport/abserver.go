@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/api"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
-	"github.com/zhigui-projects/go-hotstuff/pb"
+	"github.com/zhigui-projects/go-hotstuff/protos/pb"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 )
@@ -33,7 +33,7 @@ func NewABServer() api.BroadcastServer {
 	}
 }
 
-func (a *abServer) Broadcast(srv pb.AtomicBroadcast_BroadcastServer) error {
+func (a *abServer) Broadcast(_ *pb.Handshake, srv pb.AtomicBroadcast_BroadcastServer) error {
 	addr, src := extractRemoteAddress(srv.Context())
 	a.logger.Debug("Starting new broadcast handler for remote peer", "addr", addr, "replicaId", src)
 

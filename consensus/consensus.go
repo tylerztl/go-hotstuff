@@ -17,7 +17,7 @@ import (
 	"github.com/zhigui-projects/go-hotstuff/api"
 	"github.com/zhigui-projects/go-hotstuff/common/db/memorydb"
 	"github.com/zhigui-projects/go-hotstuff/common/utils"
-	"github.com/zhigui-projects/go-hotstuff/pb"
+	"github.com/zhigui-projects/go-hotstuff/protos/pb"
 )
 
 type HotStuffCore struct {
@@ -131,7 +131,7 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 
 	hsc.logger.Debug("proposed new proposal", "view", curView, "height", newBlock.Height, "cmds", string(cmds))
 	// broadcast proposal to other replicas
-	hsc.notify(&ProposeEvent{&pb.Proposal{ViewNumber: curView, Proposer: int64(hsc.id), Block: newBlock}})
+	hsc.notify(&ProposeEvent{&pb.Proposal{ViewNumber: curView, Block: newBlock}})
 	return nil
 }
 

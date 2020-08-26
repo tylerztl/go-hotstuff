@@ -2,13 +2,13 @@
 
 set -eux
 
-PROTO_ROOT_DIRS="./pb"
+PROTO_DIRS="$(find "$(pwd)" -name '*.proto' -exec dirname {} \; | sort | uniq)"
 
 # As this is a proto root, and there may be subdirectories with protos, compile the protos for each sub-directory which contains them
-for protos in $(find "$PROTO_ROOT_DIRS" -name '*.proto' -exec dirname {} \; | sort | uniq) ; do
-    protoc --proto_path="$PROTO_ROOT_DIRS" \
-            --go_out=plugins=grpc:. \
-            "$protos"/*.proto
+for dir in ${PROTO_DIRS}; do
+    protoc --proto_path="$dir" \
+           --go_out=plugins=grpc,paths=source_relative:"$dir/pb" \
+           "$dir"/*.proto
 done
 
 

@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/zhigui-projects/go-hotstuff/consensus"
-	"github.com/zhigui-projects/go-hotstuff/pb"
+	"github.com/zhigui-projects/go-hotstuff/protos/pb"
 	"github.com/zhigui-projects/go-hotstuff/transport"
 )
 
@@ -56,10 +56,15 @@ func TestSubmit(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
+	//var length int64 = 1024
 	for i := 0; i < 100; i++ {
 		j := i % len(nodes)
 		wg.Add(1)
 		go func(i int) {
+			//buf := make([]byte, length)
+			//if _, err := io.ReadFull(rand.Reader, buf); err != nil {
+			//	panic(err)
+			//}
 			resp, err := hscs[j].Submit(context.Background(), &pb.SubmitRequest{Cmds: []byte(strconv.Itoa(i))})
 			if err != nil {
 				panic(err)

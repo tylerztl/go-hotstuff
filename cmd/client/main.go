@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/zhigui-projects/go-hotstuff/pb"
+	"github.com/zhigui-projects/go-hotstuff/protos/pb"
 	"github.com/zhigui-projects/go-hotstuff/transport"
 )
 

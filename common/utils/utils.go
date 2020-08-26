@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 package utils
 
-import "github.com/zhigui-projects/go-hotstuff/pb"
+import "github.com/zhigui-projects/go-hotstuff/protos/pb"
 
 func GetQuorumSize(metadata *pb.ConfigMetadata) int {
 	return int(metadata.N - metadata.F)

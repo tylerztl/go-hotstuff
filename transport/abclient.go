@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/api"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
-	"github.com/zhigui-projects/go-hotstuff/pb"
+	"github.com/zhigui-projects/go-hotstuff/protos/pb"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -35,7 +35,7 @@ func NewBroadcastClient(address string, replicaId int64, opts *TLSOptions) (api.
 
 	// 在 grpc 中，client 与 server 之间通过 context 传递上下文数据的时候，不能使用 context.WithValue。
 	md := metadata.Pairs("replicaid", strconv.Itoa(int(replicaId)))
-	bc, err := pb.NewAtomicBroadcastClient(conn).Broadcast(metadata.NewOutgoingContext(context.Background(), md))
+	bc, err := pb.NewAtomicBroadcastClient(conn).Broadcast(metadata.NewOutgoingContext(context.Background(), md), &pb.Handshake{})
 	if err != nil {
 		return nil, err
 	}
@@ -50,14 +50,6 @@ func (a *abClient) Recv() (*pb.Message, error) {
 		return nil, err
 	}
 	return msg, nil
-}
-
-func (a *abClient) Send(msg *pb.Message) error {
-	if err := a.client.Send(msg); err != nil {
-		a.logger.Error("broadcast client send msg failed", "error", err)
-		return err
-	}
-	return nil
 }
 
 func (a *abClient) Close() error {

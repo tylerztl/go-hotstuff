@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/api"
 	"github.com/zhigui-projects/go-hotstuff/common/log"
-	"github.com/zhigui-projects/go-hotstuff/pb"
+	"github.com/zhigui-projects/go-hotstuff/protos/pb"
 	"google.golang.org/grpc/peer"
 )
 

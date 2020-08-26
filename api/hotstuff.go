@@ -9,7 +9,7 @@ package api
 import (
 	"context"
 
-	"github.com/zhigui-projects/go-hotstuff/pb"
+	"github.com/zhigui-projects/go-hotstuff/protos/pb"
 )
 
 type HotStuff interface {
