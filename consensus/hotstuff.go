@@ -8,7 +8,11 @@ package consensus
 
 import (
 	"context"
+	"fmt"
+	"path"
 
+	walog "github.com/BeDreamCoder/wal/log"
+	"github.com/BeDreamCoder/wal/log/walpb"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/zhigui-projects/go-hotstuff/api"
@@ -23,6 +27,8 @@ type HotStuffBase struct {
 	*NodeManager
 	queue  chan MsgExecutor
 	logger api.Logger
+
+	wal *hsWAL
 }
 
 func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer api.Signer, replicas *ReplicaConf) *HotStuffBase {
@@ -37,6 +43,14 @@ func NewHotStuffBase(id ReplicaID, nodes []*NodeInfo, signer api.Signer, replica
 		NodeManager:  NewNodeManager(id, nodes, logger),
 		queue:        make(chan MsgExecutor),
 		logger:       logger,
+
+		wal: &hsWAL{
+			logger:  logger,
+			commitC: make(chan *string),
+			id:      int(id),
+			waldir:  path.Join(log.GetCurrentPath(), fmt.Sprintf("wal-%d", id)),
+			snapdir: path.Join(log.GetCurrentPath(), fmt.Sprintf("snap-%d", id)),
+		},
 	}
 	pb.RegisterHotstuffServer(hsb.Server(), hsb)
 	return hsb
@@ -53,6 +67,8 @@ func (hsb *HotStuffBase) Start(ctx context.Context) {
 
 	go hsb.StartServer()
 	go hsb.ConnectWorkers(hsb.queue)
+
+	hsb.wal.startNode()
 
 	for {
 		select {
@@ -107,6 +123,14 @@ func (hsb *HotStuffBase) handleProposal(proposal *pb.Proposal) {
 	if proposal.Block == nil {
 		hsb.logger.Error("receive invalid proposal msg with empty block")
 		return
+	}
+
+	curHeight := uint64(proposal.Block.Height)
+	data, _ := proto.Marshal(proposal)
+	block, _ := hsb.LoadBlock(hsb.execQC.BlockHash)
+	if err := hsb.wal.Save(&pb.HardState{Committed: uint64(block.Height)},
+		[]walog.LogEntry{&walpb.Entry{Index: curHeight, Type: walpb.EntryType_EntryNormal, Data: data}}); err != nil {
+		hsb.logger.Fatal("failed to save hard state and entries", "error", err)
 	}
 
 	if err := hsb.HotStuffCore.OnReceiveProposal(proposal); err != nil {

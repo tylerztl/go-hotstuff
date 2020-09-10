@@ -57,7 +57,8 @@ func NewNodeManager(id ReplicaID, replicas []*NodeInfo, logger api.Logger) *Node
 }
 
 func (n *NodeManager) StartServer() {
-	n.Logger.Info("Hotstuff node started, beginning to serve requests", "replicaId", n.Self.Id, "serverAddress", n.Self.Addr)
+	n.Logger.Info("Hotstuff node started, beginning to serve requests",
+		"replicaId", n.Self.Id, "serverAddress", n.Self.Addr)
 
 	if err := n.Start(); err != nil {
 		n.Logger.Error(" Hotstuff node server start failed", "error", err)

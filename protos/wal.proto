@@ -1,0 +1,32 @@
+/*
+Copyright Zhigui.com. All Rights Reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+package pb;
+
+option go_package = "github.com/zhigui-projects/go-hotstuff/protos/pb";
+
+message HardState {
+    // last executed block height
+    uint64 committed = 1;
+    // highest QC block hash
+    bytes generic = 2;
+    // locked block hash
+    bytes locked = 3;
+    // last executed block hash
+    bytes executed = 4;
+}
+
+message ConfState {
+    repeated uint64 voters = 1;
+}
+
+message SnapshotMetadata {
+    ConfState conf_state = 1;
+    uint64 view = 2;
+    uint64 height = 3;
+}

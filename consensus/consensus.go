@@ -103,7 +103,7 @@ func (hsc *HotStuffCore) OnPropose(curView int64, parentHash, cmds []byte) error
 	}
 	// create the new block
 	newBlock := hsc.createLeaf(parentHash, cmds, block.Height+1)
-	// 有可能存在fork branch，分叉是因为proposal信息在view-change信息之后到达
+	// TODO：有可能存在fork branch，分叉是因为proposal信息在view-change信息之后到达
 	if newBlock.Height <= hsc.GetVoteHeight() {
 		return errors.Errorf("new block should be higher than vote height, newHeight:%d, voteHeight:%d",
 			newBlock.Height, hsc.GetVoteHeight())
